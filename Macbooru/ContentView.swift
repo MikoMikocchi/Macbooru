@@ -14,18 +14,20 @@ struct PostGridView: View {
     @State private var isLoading = false
     private let repo = PostsRepositoryImpl(client: DanbooruClient())
     @State private var columns: [GridItem] = []
+    private let gridSpacing: CGFloat = 24
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 12) {
+            LazyVGrid(columns: columns, spacing: gridSpacing) {
                 ForEach(posts) { post in
                     NavigationLink(value: post) {
                         PostTileView(post: post, height: search.tileSize.height)
-                            .frame(maxWidth: .infinity, minHeight: search.tileSize.height, maxHeight: search.tileSize.height)
+                            .frame(maxWidth: .infinity)
                             .contentShape(Rectangle())
                     }
                     .id(post.id)
                     .buttonStyle(.plain)
+                    .frame(height: search.tileSize.height)
                     .onAppear {
                         // Триггер подгрузки следующей страницы при появлении последних элементов
                         if post.id == posts.suffix(5).first?.id {
@@ -35,7 +37,8 @@ struct PostGridView: View {
                 }
                 if isLoading { ProgressView().padding() }
             }
-            .padding(12)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         }
         .navigationTitle("Posts")
         .task { await load(page: 1) }
@@ -95,7 +98,7 @@ struct PostGridView: View {
     }
 
     private func recomputeColumns() {
-        columns = [GridItem(.adaptive(minimum: search.tileSize.minColumnWidth), spacing: 12)]
+        columns = [GridItem(.adaptive(minimum: search.tileSize.minColumnWidth), spacing: gridSpacing)]
     }
 }
 
@@ -107,15 +110,17 @@ struct ContentView: View {
                 // запуск поиска
                 Task { await resetAndSearch() }
             }
-            .frame(minWidth: 240)
+            .frame(minWidth: 260, maxWidth: 320)
         } detail: {
             NavigationStack {
                 PostGridView(search: search)
+                    .padding(.trailing, 8)
                     .navigationDestination(for: Post.self) { post in
                         PostDetailView(post: post)
                     }
             }
         }
+        .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
     }
 
     @MainActor

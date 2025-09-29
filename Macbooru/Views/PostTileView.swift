@@ -10,10 +10,11 @@ struct PostTileView: View {
             RemoteImage(
                 candidates: [post.previewURL, post.largeURL, post.fileURL].compactMap { $0 },
                 height: height,
-                contentMode: .fill,
+                contentMode: .fit,
                 animateFirstAppearance: true,
                 animateUpgrades: false
             )
+            .padding(6)
             if hover {
                 LinearGradient(
                     gradient: Gradient(colors: [.black.opacity(0.0), .black.opacity(0.5)]),
@@ -30,6 +31,10 @@ struct PostTileView: View {
                 .padding(8)
             }
         }
+    .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+    .fixedSize(horizontal: false, vertical: true)
+    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onHover { hover = $0 }
         .contextMenu {
             if let url = post.fileURL { Link("Open original in Browser", destination: url) }

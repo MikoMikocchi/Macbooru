@@ -18,10 +18,10 @@ enum TileSize: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
     var height: CGFloat {
-        switch self { case .small: return 140; case .medium: return 170; case .large: return 220 }
+        switch self { case .small: return 120; case .medium: return 150; case .large: return 190 }
     }
     var minColumnWidth: CGFloat {
-        switch self { case .small: return 140; case .medium: return 170; case .large: return 220 }
+        switch self { case .small: return 130; case .medium: return 160; case .large: return 200 }
     }
 }
 
