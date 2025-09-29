@@ -133,31 +133,6 @@ struct ContentView: View {
     }
 }
 
-struct PostDetailView: View {
-    let post: Post
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            RemoteImage(
-                candidates: [post.largeURL, post.fileURL, post.previewURL].compactMap { $0 },
-                height: 420,
-                contentMode: .fit,
-                animateFirstAppearance: false,
-                animateUpgrades: false
-            )
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("ID: \(post.id)").font(.headline)
-            if let rating = post.rating { Text("Rating: \(rating)") }
-            if let tags = post.tagString { Text(tags).lineLimit(3) }
-            if let src = post.source { Link("Source", destination: URL(string: src) ?? URL(string: "https://danbooru.donmai.us")!) }
-            Spacer()
-        }
-        .padding()
-        .frame(maxWidth: 900, alignment: .leading)
-        .navigationTitle("Post #\(post.id)")
-    }
-}
-
 #Preview {
     ContentView()
 }
