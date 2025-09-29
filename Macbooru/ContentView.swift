@@ -9,26 +9,19 @@ import SwiftUI
 import SwiftData
 
 struct PostGridView: View {
+    @ObservedObject var search: SearchState
     @State private var posts: [Post] = []
     @State private var isLoading = false
-    @State private var page = 1
     private let repo = PostsRepositoryImpl(client: DanbooruClient())
-
-    private let columns = Array(repeating: GridItem(.flexible(minimum: 160), spacing: 12), count: 5)
+    @State private var columns: [GridItem] = []
 
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(posts) { post in
                     NavigationLink(value: post) {
-                        RemoteImage(
-                            candidates: [post.previewURL, post.largeURL, post.fileURL].compactMap { $0 },
-                            height: 160,
-                            contentMode: .fill,
-                            animateFirstAppearance: true,
-                            animateUpgrades: false
-                        )
-                            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160)
+                        PostTileView(post: post, height: search.tileSize.height)
+                            .frame(maxWidth: .infinity, minHeight: search.tileSize.height, maxHeight: search.tileSize.height)
                             .contentShape(Rectangle())
                     }
                     .id(post.id)
@@ -36,7 +29,7 @@ struct PostGridView: View {
                     .onAppear {
                         // Триггер подгрузки следующей страницы при появлении последних элементов
                         if post.id == posts.suffix(5).first?.id {
-                            Task { await load(page: page) }
+                            Task { await load(page: search.page) }
                         }
                     }
                 }
@@ -46,27 +39,34 @@ struct PostGridView: View {
         }
         .navigationTitle("Posts")
         .task { await load(page: 1) }
-        .onAppear {
-            // дополнительная подгрузка при прокрутке можно добавить позже с GeometryReader
-        }
+        .onChange(of: search.tileSize) { _ in recomputeColumns() }
+        .onChange(of: search.searchTrigger) { _ in Task { await refresh() } }
+        .onAppear { recomputeColumns() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await refresh() }
                 } label: { Label("Refresh", systemImage: "arrow.clockwise") }
             }
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    Task { await load(page: page) }
-                } label: { Label("More", systemImage: "ellipsis.circle") }
-                .disabled(isLoading)
+            ToolbarItem(placement: .status) {
+                HStack(spacing: 8) {
+                    Button {
+                        guard search.page > 2 else { return }
+                        Task { await load(page: max(1, search.page - 2)) }
+                    } label: { Label("Prev", systemImage: "chevron.left") }
+                    .disabled(isLoading || search.page <= 2)
+                    Button {
+                        Task { await load(page: search.page) }
+                    } label: { Label("Next", systemImage: "chevron.right") }
+                    .disabled(isLoading)
+                }
             }
         }
     }
 
     @MainActor
     private func refresh() async {
-        page = 1
+        search.page = 1
         posts.removeAll()
         await load(page: 1)
     }
@@ -77,27 +77,54 @@ struct PostGridView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let next = try await repo.recent(page: page, limit: 30)
+            let next: [Post]
+            if let q = search.danbooruQuery {
+                next = try await repo.byTags(q, page: page, limit: 30)
+            } else {
+                next = try await repo.recent(page: page, limit: 30)
+            }
             // Убираем дубликаты по id, сохраняя порядок
             let existingIDs = Set(posts.map { $0.id })
             let filtered = next.filter { !existingIDs.contains($0.id) }
             posts.append(contentsOf: filtered)
-            self.page = page + 1
+            self.search.page = page + 1
         } catch {
             // TODO: показать тост/алерт
             print("Failed to load posts: \(error)")
         }
     }
+
+    private func recomputeColumns() {
+        columns = [GridItem(.adaptive(minimum: search.tileSize.minColumnWidth), spacing: 12)]
+    }
 }
 
 struct ContentView: View {
+    @StateObject private var search = SearchState()
     var body: some View {
-        NavigationStack {
-            PostGridView()
-                .navigationDestination(for: Post.self) { post in
-                    PostDetailView(post: post)
-                }
+        NavigationSplitView {
+            SidebarView(state: search) {
+                // запуск поиска
+                Task { await resetAndSearch() }
+            }
+            .frame(minWidth: 240)
+        } detail: {
+            NavigationStack {
+                PostGridView(search: search)
+                    .navigationDestination(for: Post.self) { post in
+                        PostDetailView(post: post)
+                    }
+            }
         }
+    }
+
+    @MainActor
+    private func resetAndSearch() async {
+        // сброс грида и загрузка первой страницы под новый запрос
+        // фактическая очистка в PostGridView происходит по refresh()
+        // здесь просто увеличим page и дадим сигнал обновиться
+        // (упрощённо — можно сделать через ObservableObject/Publisher позже)
+        // Ничего не делаем здесь, так как PostGridView сам вызывает .task { load(page:1) }
     }
 }
 
