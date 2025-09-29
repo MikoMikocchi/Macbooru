@@ -1,9 +1,14 @@
 import SwiftUI
 
+#if os(macOS)
+    import AppKit
+#endif
+
 struct PostTileView: View {
     let post: Post
     let height: CGFloat
     @State private var hover = false
+    @EnvironmentObject private var search: SearchState
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -15,6 +20,16 @@ struct PostTileView: View {
                 animateUpgrades: false
             )
             .padding(6)
+            .overlay(
+                // Накладываем блюр/материал поверх для NSFW, если включено в настройках
+                Group {
+                    if search.blurSensitive, let r = post.rating?.lowercased(),
+                        ["q", "e"].contains(r)
+                    {
+                        VisualBlurOverlay()
+                    }
+                }
+            )
             if hover {
                 LinearGradient(
                     gradient: Gradient(colors: [.black.opacity(0.0), .black.opacity(0.5)]),
@@ -31,10 +46,10 @@ struct PostTileView: View {
                 .padding(8)
             }
         }
-    .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-    .fixedSize(horizontal: false, vertical: true)
-    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+        .fixedSize(horizontal: false, vertical: true)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onHover { hover = $0 }
         .contextMenu {
             if let url = post.fileURL { Link("Open original in Browser", destination: url) }
@@ -54,3 +69,56 @@ private struct Badge: View {
             .background(.ultraThinMaterial, in: Capsule())
     }
 }
+
+#if os(macOS)
+    private struct VisualBlurOverlay: View {
+        var body: some View {
+            ZStack {
+                VisualMaterialView(
+                    material: .hudWindow, blendingMode: .withinWindow, state: .active
+                )
+                .opacity(0.85)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                Text("NSFW")
+                    .font(.caption).bold()
+                    .padding(6)
+                    .background(.thinMaterial, in: Capsule())
+            }
+            .allowsHitTesting(false)
+        }
+    }
+    // Local NSVisualEffectView wrapper for blur/material overlays
+    private struct VisualMaterialView: NSViewRepresentable {
+        var material: NSVisualEffectView.Material
+        var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
+        var state: NSVisualEffectView.State = .active
+
+        func makeNSView(context: Context) -> NSVisualEffectView {
+            let v = NSVisualEffectView()
+            v.material = material
+            v.blendingMode = blendingMode
+            v.state = state
+            v.isEmphasized = true
+            v.translatesAutoresizingMaskIntoConstraints = false
+            return v
+        }
+
+        func updateNSView(_ v: NSVisualEffectView, context: Context) {
+            v.material = material
+            v.blendingMode = blendingMode
+            v.state = state
+        }
+    }
+#else
+    private struct VisualBlurOverlay: View {
+        var body: some View {
+            Color.black.opacity(0.25)
+                .overlay(
+                    Text("NSFW").font(.caption).bold()
+                        .padding(6)
+                        .background(.thinMaterial, in: Capsule())
+                )
+                .allowsHitTesting(false)
+        }
+    }
+#endif

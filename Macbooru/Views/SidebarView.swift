@@ -51,6 +51,10 @@ struct SidebarView: View {
                         .controlSize(.small)
                         .labelsHidden()
                     }
+                    Toggle(isOn: $state.blurSensitive) {
+                        Label("Blur NSFW (Q/E)", systemImage: "eye.slash")
+                    }
+                    .toggleStyle(.switch)
                     Button("Search") {
                         state.resetForNewSearch()
                         onSearch?()

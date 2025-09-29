@@ -12,6 +12,7 @@ struct PostGridView: View {
     @ObservedObject var search: SearchState
     @State private var posts: [Post] = []
     @State private var isLoading = false
+    @State private var lastErrorMessage: String? = nil
     private let repo = PostsRepositoryImpl(client: DanbooruClient())
     @State private var columns: [GridItem] = []
     private let gridSpacing: CGFloat = 24
@@ -71,6 +72,26 @@ struct PostGridView: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if let msg = lastErrorMessage {
+                HStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                    Text(msg)
+                    Button("Retry") { Task { await refresh() } }
+                        .buttonStyle(.borderedProminent)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.ultraThinMaterial, in: Capsule())
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .padding(.bottom, 12)
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        withAnimation { lastErrorMessage = nil }
+                    }
+                }
+            }
+        }
     }
 
     @MainActor
@@ -98,7 +119,9 @@ struct PostGridView: View {
             posts.append(contentsOf: filtered)
             self.search.page = page + 1
         } catch {
-            // TODO: показать тост/алерт
+            withAnimation {
+                lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"
+            }
             print("Failed to load posts: \(error)")
         }
     }

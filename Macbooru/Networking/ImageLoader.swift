@@ -1,12 +1,13 @@
 import Foundation
 import SwiftUI
+
 #if os(macOS)
-import AppKit
-import ImageIO
-public typealias PlatformImage = NSImage
+    import AppKit
+    import ImageIO
+    public typealias PlatformImage = NSImage
 #else
-import UIKit
-public typealias PlatformImage = UIImage
+    import UIKit
+    public typealias PlatformImage = UIImage
 #endif
 
 actor ImageMemoryCache {
@@ -23,15 +24,16 @@ final class ThrottledImageLoader {
 
     private init() {
         let cfg = URLSessionConfiguration.default
-    cfg.waitsForConnectivity = false
-    cfg.httpMaximumConnectionsPerHost = 3
-    cfg.timeoutIntervalForRequest = 15
-    cfg.timeoutIntervalForResource = 30
+        cfg.waitsForConnectivity = false
+        cfg.httpMaximumConnectionsPerHost = 3
+        cfg.timeoutIntervalForRequest = 15
+        cfg.timeoutIntervalForResource = 30
         cfg.requestCachePolicy = .returnCacheDataElseLoad
         cfg.urlCache = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
         cfg.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            "Accept": "image/jpeg,image/png,*/*;q=0.5"
+            "User-Agent":
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+            "Accept": "image/jpeg,image/png,*/*;q=0.5",
         ]
         self.session = URLSession(configuration: cfg)
     }
@@ -40,57 +42,69 @@ final class ThrottledImageLoader {
         if let cached = await ImageMemoryCache.shared.image(for: url) { return cached }
         var req = URLRequest(url: url)
         req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
-    req.setValue("image/jpeg,image/png,*/*;q=0.5", forHTTPHeaderField: "Accept")
-    req.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", forHTTPHeaderField: "User-Agent")
+        req.setValue("image/jpeg,image/png,*/*;q=0.5", forHTTPHeaderField: "Accept")
+        req.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+            forHTTPHeaderField: "User-Agent")
         var lastError: Error? = nil
         for attempt in 0..<3 {
             do {
                 let (data, resp) = try await session.data(for: req)
-                guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+                else {
                     throw URLError(.badServerResponse)
                 }
                 let ctype = http.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
                 // Диагностика: какой формат реально приходит
                 print("Image content-type=\(ctype) url=\(url.lastPathComponent)")
-        #if os(macOS)
-                        // Надежное декодирование через NSBitmapImageRep -> NSImage с валидным size
-                        let img: NSImage? = await MainActor.run {
-                            if let rep = NSBitmapImageRep(data: data) {
-                                // Обеспечим, что размер не нулевой
-                                let size = NSSize(width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
-                                rep.size = size
-                                let image = NSImage(size: size)
-                                image.addRepresentation(rep)
-                                image.isTemplate = false
-                                return image
-                            }
-                            if let src = CGImageSourceCreateWithData(data as CFData, nil),
-                               let cg = CGImageSourceCreateImageAtIndex(src, 0, [kCGImageSourceShouldCache: true] as CFDictionary) {
-                                let size = NSSize(width: cg.width, height: cg.height)
-                                let image = NSImage(cgImage: cg, size: size)
-                                image.isTemplate = false
-                                return image
-                            }
-                            if let image = NSImage(data: data) {
-                                if image.size == .zero, let rep = image.representations.first as? NSBitmapImageRep {
-                                    image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
-                                }
-                                image.isTemplate = false
-                                return image
-                            }
-                            return nil
+                #if os(macOS)
+                    // Надежное декодирование через NSBitmapImageRep -> NSImage с валидным size
+                    let img: NSImage? = await MainActor.run {
+                        if let rep = NSBitmapImageRep(data: data) {
+                            // Обеспечим, что размер не нулевой
+                            let size = NSSize(
+                                width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
+                            rep.size = size
+                            let image = NSImage(size: size)
+                            image.addRepresentation(rep)
+                            image.isTemplate = false
+                            return image
                         }
-                        guard let img else { throw URLError(.cannotDecodeContentData) }
-                        print("Decoded image size: \(Int(img.size.width))x\(Int(img.size.height)) for \(url.lastPathComponent)")
-        #else
-                guard let img = UIImage(data: data, scale: UIScreen.main.scale) else { throw URLError(.cannotDecodeContentData) }
-        #endif
+                        if let src = CGImageSourceCreateWithData(data as CFData, nil),
+                            let cg = CGImageSourceCreateImageAtIndex(
+                                src, 0, [kCGImageSourceShouldCache: true] as CFDictionary)
+                        {
+                            let size = NSSize(width: cg.width, height: cg.height)
+                            let image = NSImage(cgImage: cg, size: size)
+                            image.isTemplate = false
+                            return image
+                        }
+                        if let image = NSImage(data: data) {
+                            if image.size == .zero,
+                                let rep = image.representations.first as? NSBitmapImageRep
+                            {
+                                image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                            }
+                            image.isTemplate = false
+                            return image
+                        }
+                        return nil
+                    }
+                    guard let img else { throw URLError(.cannotDecodeContentData) }
+                    print(
+                        "Decoded image size: \(Int(img.size.width))x\(Int(img.size.height)) for \(url.lastPathComponent)"
+                    )
+                #else
+                    guard let img = UIImage(data: data, scale: UIScreen.main.scale) else {
+                        throw URLError(.cannotDecodeContentData)
+                    }
+                #endif
                 await ImageMemoryCache.shared.set(img, for: url)
                 return img
             } catch {
                 lastError = error
                 print("Image load error: \(url.absoluteString) — \(error.localizedDescription)")
-                let delay = UInt64(pow(2.0, Double(attempt)) * 200_000_000) // 0.2s, 0.4s, 0.8s
+                let delay = UInt64(pow(2.0, Double(attempt)) * 200_000_000)  // 0.2s, 0.4s, 0.8s
                 try? await Task.sleep(nanoseconds: delay)
             }
         }
@@ -128,15 +142,15 @@ struct RemoteImage: View {
         ZStack {
             if let image {
                 #if os(macOS)
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .modifier(Scaled(contentMode: contentMode))
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .modifier(Scaled(contentMode: contentMode))
                 #else
-                Image(uiImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .modifier(Scaled(contentMode: contentMode))
+                    Image(uiImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .modifier(Scaled(contentMode: contentMode))
                 #endif
             } else if isLoading {
                 ProgressView()
@@ -166,6 +180,7 @@ struct RemoteImage: View {
     }
 
     private func load() async {
+        if Task.isCancelled { return }
         await MainActor.run {
             lastError = nil
             image = nil
@@ -178,13 +193,16 @@ struct RemoteImage: View {
         // Прогрессивная загрузка: сначала быстрый превью, затем апгрейд до более крупного
         var firstShownIndex: Int? = nil
         for (idx, url) in candidates.enumerated() {
+            if Task.isCancelled { return }
             do {
                 let img = try await ThrottledImageLoader.shared.load(url)
+                if Task.isCancelled { return }
                 let newPixels = pixelCountFor(img)
                 // показать первый успешный вариант
                 if firstShownIndex == nil {
                     firstShownIndex = idx
                     await MainActor.run {
+                        if Task.isCancelled { return }
                         if animateFirstAppearance {
                             withAnimation(.easeInOut(duration: 0.12)) {
                                 self.image = img
@@ -197,8 +215,9 @@ struct RemoteImage: View {
                         self.isLoading = false
                         self.didShowFirst = true
                     }
-                } else if newPixels > pixelCount { // улучшение — заменить
+                } else if newPixels > pixelCount {  // улучшение — заменить
                     await MainActor.run {
+                        if Task.isCancelled { return }
                         if animateUpgrades {
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 self.image = img
@@ -216,7 +235,7 @@ struct RemoteImage: View {
             }
         }
         // если вообще ничего не удалось
-        if firstShownIndex == nil {
+        if !Task.isCancelled, firstShownIndex == nil {
             await MainActor.run {
                 self.lastError = URLError(.cannotLoadFromNetwork)
                 self.isLoading = false
@@ -226,10 +245,10 @@ struct RemoteImage: View {
 
     private func pixelCountFor(_ img: PlatformImage) -> Int {
         #if os(macOS)
-        return max(1, Int(img.size.width) * Int(img.size.height))
+            return max(1, Int(img.size.width) * Int(img.size.height))
         #else
-        let scale = img.scale
-        return max(1, Int(img.size.width * scale) * Int(img.size.height * scale))
+            let scale = img.scale
+            return max(1, Int(img.size.width * scale) * Int(img.size.height * scale))
         #endif
     }
 }

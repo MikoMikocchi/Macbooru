@@ -15,28 +15,59 @@ enum APIError: Error {
 final class DanbooruClient {
     private let session: URLSession
     private let config: DanbooruConfig
+    private static let iso8601WithFS: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let iso8601NoFS: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+    private static func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let s = try container.decode(String.self)
+            if let d = DanbooruClient.iso8601WithFS.date(from: s) { return d }
+            if let d = DanbooruClient.iso8601NoFS.date(from: s) { return d }
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: decoder.codingPath,
+                    debugDescription: "Invalid ISO8601 date: \(s)"
+                )
+            )
+        }
+        return decoder
+    }
 
-    init(session: URLSession = {
-        let cfg = URLSessionConfiguration.default
-        cfg.httpMaximumConnectionsPerHost = 3
-        cfg.waitsForConnectivity = true
-        cfg.timeoutIntervalForRequest = 30
-        cfg.timeoutIntervalForResource = 60
-        cfg.httpAdditionalHeaders = [
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            "Accept": "application/json"
-        ]
-        return URLSession(configuration: cfg)
-    }(), config: DanbooruConfig = DanbooruConfig()) {
+    init(
+        session: URLSession = {
+            let cfg = URLSessionConfiguration.default
+            cfg.httpMaximumConnectionsPerHost = 3
+            cfg.waitsForConnectivity = true
+            cfg.timeoutIntervalForRequest = 30
+            cfg.timeoutIntervalForResource = 60
+            cfg.httpAdditionalHeaders = [
+                "User-Agent":
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+                "Accept": "application/json",
+            ]
+            return URLSession(configuration: cfg)
+        }(), config: DanbooruConfig = DanbooruConfig()
+    ) {
         self.session = session
         self.config = config
     }
 
     func fetchPosts(tags: String? = nil, page: Int = 1, limit: Int = 20) async throws -> [Post] {
-        var comps = URLComponents(url: config.baseURL.appendingPathComponent("/posts.json"), resolvingAgainstBaseURL: false)!
+        var comps = URLComponents(
+            url: config.baseURL.appendingPathComponent("/posts.json"),
+            resolvingAgainstBaseURL: false)!
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "page", value: String(page)),
-            URLQueryItem(name: "limit", value: String(limit))
+            URLQueryItem(name: "limit", value: String(limit)),
         ]
         if let tags, !tags.isEmpty { queryItems.append(URLQueryItem(name: "tags", value: tags)) }
         comps.queryItems = queryItems
@@ -52,10 +83,11 @@ final class DanbooruClient {
 
         let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.serverError(http.statusCode) }
+        guard (200..<300).contains(http.statusCode) else {
+            throw APIError.serverError(http.statusCode)
+        }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        let decoder = DanbooruClient.makeDecoder()
         do {
             return try decoder.decode([Post].self, from: data)
         } catch {
