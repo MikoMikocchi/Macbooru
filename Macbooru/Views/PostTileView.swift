@@ -19,6 +19,17 @@ struct PostTileView: View {
                 animateFirstAppearance: true,
                 animateUpgrades: false
             )
+            // Усиленный блюр самого изображения для NSFW
+            .blur(
+                radius: {
+                    guard search.blurSensitive, let r = post.rating?.lowercased() else { return 0 }
+                    switch r {
+                    case "e": return 16
+                    case "q": return 12
+                    default: return 0
+                    }
+                }()
+            )
             .padding(6)
             .overlay(
                 // Накладываем блюр/материал поверх для NSFW, если включено в настройках
@@ -77,10 +88,12 @@ private struct Badge: View {
                 VisualMaterialView(
                     material: .hudWindow, blendingMode: .withinWindow, state: .active
                 )
-                .opacity(0.85)
+                .opacity(0.95)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-                Text("NSFW")
-                    .font(.caption).bold()
+                Color.black.opacity(0.25)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                Image(systemName: "eye.slash")
+                    .font(.title3.weight(.semibold))
                     .padding(6)
                     .background(.thinMaterial, in: Capsule())
             }
@@ -112,9 +125,10 @@ private struct Badge: View {
 #else
     private struct VisualBlurOverlay: View {
         var body: some View {
-            Color.black.opacity(0.25)
+            Color.black.opacity(0.4)
                 .overlay(
-                    Text("NSFW").font(.caption).bold()
+                    Image(systemName: "eye.slash")
+                        .font(.title3.weight(.semibold))
                         .padding(6)
                         .background(.thinMaterial, in: Capsule())
                 )
