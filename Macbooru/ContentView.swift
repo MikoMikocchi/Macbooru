@@ -5,8 +5,8 @@
 //  Created by Михаил Мацкевич on 29.09.2025.
 //
 
-import SwiftUI
 import SwiftData
+import SwiftUI
 
 struct PostGridView: View {
     @ObservedObject var search: SearchState
@@ -49,18 +49,24 @@ struct PostGridView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await refresh() }
-                } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
             }
             ToolbarItem(placement: .status) {
                 HStack(spacing: 8) {
                     Button {
                         guard search.page > 2 else { return }
                         Task { await load(page: max(1, search.page - 2)) }
-                    } label: { Label("Prev", systemImage: "chevron.left") }
+                    } label: {
+                        Label("Prev", systemImage: "chevron.left")
+                    }
                     .disabled(isLoading || search.page <= 2)
                     Button {
                         Task { await load(page: search.page) }
-                    } label: { Label("Next", systemImage: "chevron.right") }
+                    } label: {
+                        Label("Next", systemImage: "chevron.right")
+                    }
                     .disabled(isLoading)
                 }
             }
@@ -98,7 +104,9 @@ struct PostGridView: View {
     }
 
     private func recomputeColumns() {
-        columns = [GridItem(.adaptive(minimum: search.tileSize.minColumnWidth), spacing: gridSpacing)]
+        columns = [
+            GridItem(.adaptive(minimum: search.tileSize.minColumnWidth), spacing: gridSpacing)
+        ]
     }
 }
 
@@ -120,6 +128,7 @@ struct ContentView: View {
                     }
             }
         }
+        .environmentObject(search)
         .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
     }
 

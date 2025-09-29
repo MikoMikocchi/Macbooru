@@ -1,11 +1,15 @@
 import SwiftUI
 
+// Types Post и RemoteImage должны быть в том же таргете. Импорт доп. модулей не требуется.
+
 #if os(macOS)
     import AppKit
 #endif
 
 struct PostDetailView: View {
     let post: Post
+    @EnvironmentObject private var search: SearchState
+    @Environment(\.dismiss) private var dismiss
 
     // Зум и панорамирование
     @State private var zoom: CGFloat = 1.0
@@ -35,21 +39,33 @@ struct PostDetailView: View {
                         )
                         .scaleEffect(zoom)
                         .offset(offset)
+                        .onChange(of: zoom) { _ in
+                            // При изменении зума (в т.ч. кнопками) удерживаем изображение в пределах рамки
+                            offset = clampedOffset(
+                                offset, containerSize: proxy.size, contentBaseHeight: h)
+                        }
                         #if os(macOS)
                             // macOS: захватываем жесты трекпада через AppKit-представление поверх
                             .overlay(
                                 PanZoomProxy(
                                     onPan: { delta in
-                                        // инвертируем направление панорамирования, чтобы пальцы и картинка двигались «естественно»
-                                        offset = CGSize(
+                                        // Панорамирование с ограничением в рамках области просмотра
+                                        let candidate = CGSize(
                                             width: offset.width + delta.width,
-                                            height: offset.height + delta.height)
+                                            height: offset.height + delta.height
+                                        )
+                                        offset = clampedOffset(
+                                            candidate, containerSize: proxy.size,
+                                            contentBaseHeight: h)
                                         lastDrag = offset
                                     },
                                     onMagnify: { scale in
                                         let new = min(6.0, max(0.5, zoom * scale))
                                         zoom = new
                                         lastZoom = new
+                                        // после изменения зума — скорректировать оффсет в допустимые пределы
+                                        offset = clampedOffset(
+                                            offset, containerSize: proxy.size, contentBaseHeight: h)
                                     }
                                 )
                             )
@@ -67,16 +83,20 @@ struct PostDetailView: View {
                             .simultaneousGesture(
                                 DragGesture()
                                     .onChanged { g in
-                                        offset = CGSize(
+                                        let candidate = CGSize(
                                             width: lastDrag.width + g.translation.width,
-                                            height: lastDrag.height + g.translation.height)
+                                            height: lastDrag.height + g.translation.height
+                                        )
+                                        offset = clampedOffset(
+                                            candidate, containerSize: proxy.size,
+                                            contentBaseHeight: h)
                                     }
                                     .onEnded { _ in
                                         lastDrag = offset
                                     }
                             )
                         #endif
-                        .animation(.easeInOut(duration: 0.15), value: zoom)
+                        .animation(Animation.easeInOut(duration: 0.15), value: zoom)
                     }
                     .frame(minHeight: 460)
 
@@ -193,23 +213,39 @@ struct PostDetailView: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 if !post.tagsArtist.isEmpty {
                                     TagSection(
-                                        title: "Artist", color: .purple, tags: post.tagsArtist)
+                                        title: "Artist", color: .purple, tags: post.tagsArtist,
+                                        onOpenTag: { tag in openSearchInApp(tag) },
+                                        onCopyTag: { tag in copySingleTag(tag) }
+                                    )
                                 }
                                 if !post.tagsCopyright.isEmpty {
                                     TagSection(
-                                        title: "Copyright", color: .teal, tags: post.tagsCopyright)
+                                        title: "Copyright", color: .teal, tags: post.tagsCopyright,
+                                        onOpenTag: { tag in openSearchInApp(tag) },
+                                        onCopyTag: { tag in copySingleTag(tag) }
+                                    )
                                 }
                                 if !post.tagsCharacter.isEmpty {
                                     TagSection(
                                         title: "Characters", color: .orange,
-                                        tags: post.tagsCharacter)
+                                        tags: post.tagsCharacter,
+                                        onOpenTag: { tag in openSearchInApp(tag) },
+                                        onCopyTag: { tag in copySingleTag(tag) }
+                                    )
                                 }
                                 if !post.tagsGeneral.isEmpty {
                                     TagSection(
-                                        title: "General", color: .secondary, tags: post.tagsGeneral)
+                                        title: "General", color: .secondary, tags: post.tagsGeneral,
+                                        onOpenTag: { tag in openSearchInApp(tag) },
+                                        onCopyTag: { tag in copySingleTag(tag) }
+                                    )
                                 }
                                 if !post.tagsMeta.isEmpty {
-                                    TagSection(title: "Meta", color: .pink, tags: post.tagsMeta)
+                                    TagSection(
+                                        title: "Meta", color: .pink, tags: post.tagsMeta,
+                                        onOpenTag: { tag in openSearchInApp(tag) },
+                                        onCopyTag: { tag in copySingleTag(tag) }
+                                    )
                                 }
                             }
                             .font(.callout)
@@ -225,7 +261,11 @@ struct PostDetailView: View {
                     } else {
                         GroupBox("Tags") {
                             if !post.allTags.isEmpty {
-                                TagFlowView(tags: post.allTags)
+                                TagFlowView(
+                                    tags: post.allTags,
+                                    onOpenTag: { tag in openSearchInApp(tag) },
+                                    onCopyTag: { tag in copySingleTag(tag) }
+                                )
                             } else {
                                 Text("No tags").foregroundStyle(.secondary)
                             }
@@ -293,6 +333,39 @@ struct PostDetailView: View {
         withAnimation(.easeInOut(duration: 0.12)) { zoom = new }
     }
 
+    // Ограничение смещения так, чтобы изображение не «улетало» за рамки видимой области.
+    // containerSize — размер GeometryReader, contentBaseHeight — базовая высота изображения (h),
+    // фактический размер содержимого зависит от зума.
+    private func clampedOffset(
+        _ candidate: CGSize, containerSize: CGSize, contentBaseHeight: CGFloat
+    ) -> CGSize {
+        // Корректно учитываем .fit: сначала вычисляем базовые размеры при fit (до зума), затем домножаем на zoom
+        var contentWidth: CGFloat
+        var contentHeight: CGFloat
+
+        if let w = post.width, let h = post.height, w > 0, h > 0 {
+            let aspect = CGFloat(w) / CGFloat(h)
+            // Базовая (fit) ширина/высота до применения зума
+            let baseWidthFit = min(containerSize.width, contentBaseHeight * aspect)
+            let baseHeightFit = min(contentBaseHeight, containerSize.width / aspect)
+            contentWidth = baseWidthFit * zoom
+            contentHeight = baseHeightFit * zoom
+        } else {
+            // Без знания аспекта: считаем, что fit укладывает в заданную высоту и ширину контейнера
+            contentWidth = containerSize.width * zoom
+            contentHeight = contentBaseHeight * zoom
+        }
+
+        // Ограничения по половине «выпирания»
+        let allowX: CGFloat = max(0, (contentWidth - containerSize.width) / 2)
+        let allowY: CGFloat = max(0, (contentHeight - containerSize.height) / 2)
+
+        // Кламп по рамке
+        let clampedX = min(max(candidate.width, -allowX), allowX)
+        let clampedY = min(max(candidate.height, -allowY), allowY)
+        return CGSize(width: clampedX, height: clampedY)
+    }
+
     private func copyTagsToPasteboard() {
         #if os(macOS)
             if let s = post.tagString, !s.isEmpty {
@@ -325,6 +398,25 @@ struct PostDetailView: View {
             withAnimation { saveMessage = "Save failed: \(error.localizedDescription)" }
         }
     }
+
+    // ЛКМ: начать поиск по тегу внутри приложения и закрыть детальный экран
+    private func openSearchInApp(_ tag: String) {
+        // Заменяем текущий запрос ровно на один выбранный тег
+        let token = tag.replacingOccurrences(of: " ", with: "_")
+        search.tags = token
+        search.resetForNewSearch()
+        dismiss()
+    }
+
+    // ПКМ: скопировать конкретный тег и показать явный тост
+    private func copySingleTag(_ tag: String) {
+        #if os(macOS)
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(tag, forType: .string)
+            withAnimation { saveMessage = "Tag copied: \(tag)" }
+        #endif
+    }
 }
 
 // MARK: - Rating badge
@@ -345,23 +437,20 @@ private struct RatingBadge: View {
 // MARK: - Flow layout for tags
 private struct TagFlowView: View {
     let tags: [String]
-    @State private var copied: String? = nil
+    var onOpenTag: ((String) -> Void)? = nil
+    var onCopyTag: ((String) -> Void)? = nil
 
     var body: some View {
         Group {
             if #available(macOS 13.0, iOS 16.0, *) {
                 FlowLayout(alignment: .leading, spacing: 6) {
                     ForEach(tags, id: \.self) { tag in
-                        TagChip(title: tag.replacingOccurrences(of: "_", with: " ")) { copy(tag) }
-                            .contextMenu {
-                                Button("Copy tag") { copy(tag) }
-                                if let url = URL(
-                                    string:
-                                        "https://danbooru.donmai.us/posts?tags=\(tag.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? tag)"
-                                ) {
-                                    Link("Open tag search", destination: url)
-                                }
-                            }
+                        TagChip(
+                            tag: tag,
+                            title: tag.replacingOccurrences(of: "_", with: " "),
+                            onOpen: { onOpenTag?(tag) },
+                            onCopy: { onCopyTag?(tag) }
+                        )
                     }
                 }
             } else {
@@ -371,39 +460,105 @@ private struct TagFlowView: View {
                     spacing: 6
                 ) {
                     ForEach(tags, id: \.self) { tag in
-                        TagChip(title: tag.replacingOccurrences(of: "_", with: " ")) { copy(tag) }
+                        TagChip(
+                            tag: tag,
+                            title: tag.replacingOccurrences(of: "_", with: " "),
+                            onOpen: { onOpenTag?(tag) },
+                            onCopy: { onCopyTag?(tag) }
+                        )
                     }
                 }
             }
         }
     }
+}
 
-    private func copy(_ t: String) {
+private struct TagChip: View {
+    let tag: String
+    let title: String
+    var onOpen: (() -> Void)?
+    var onCopy: (() -> Void)?
+
+    var body: some View {
         #if os(macOS)
-            let pb = NSPasteboard.general
-            pb.clearContents()
-            pb.setString(t, forType: .string)
+            Button(action: { onOpen?() }) {
+                Text(title)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.thickMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.quinary, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            .help("Left click: search in app; Right click: copy tag")
+            // ПКМ ловим поверх, но пропускаем ЛКМ
+            .overlay(
+                RightClickCatcher(onRightClick: { onCopy?() })
+                    .allowsHitTesting(true)
+            )
+        #else
+            Button(action: { onOpen?() }) {
+                Text(title)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.thickMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.quinary, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
         #endif
     }
 }
 
-private struct TagChip: View {
-    let title: String
-    var onTap: (() -> Void)?
-    var body: some View {
-        Button(action: { onTap?() }) {
-            Text(title)
-                .font(.callout)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.thickMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(.quinary, lineWidth: 1))
+#if os(macOS)
+    // NSViewRepresentable, чтобы отлавливать правый клик поверх SwiftUI Button
+    private struct RightClickCatcher: NSViewRepresentable {
+        var onRightClick: () -> Void
+
+        func makeNSView(context: Context) -> RightClickCatcherView {
+            let v = RightClickCatcherView()
+            v.onRightClick = onRightClick
+            v.translatesAutoresizingMaskIntoConstraints = false
+            return v
         }
-        .buttonStyle(.plain)
-        .help("Click to copy tag")
+
+        func updateNSView(_ nsView: RightClickCatcherView, context: Context) {
+            nsView.onRightClick = onRightClick
+        }
     }
-}
+
+    private final class RightClickCatcherView: NSView {
+        var onRightClick: (() -> Void)?
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            // Пропускаем ЛКМ, обрабатываем только ПКМ/прочие
+            if let ev = NSApp.currentEvent {
+                switch ev.type {
+                case .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp:
+                    return self
+                case .leftMouseDown, .leftMouseUp:
+                    if ev.modifierFlags.contains(.control) { return self }
+                    return nil
+                default:
+                    return nil
+                }
+            }
+            return nil
+        }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func mouseDown(with event: NSEvent) {
+            if event.modifierFlags.contains(.control) {
+                onRightClick?()
+            } else {
+                super.mouseDown(with: event)
+            }
+        }
+        override func rightMouseDown(with event: NSEvent) {
+            onRightClick?()
+        }
+    }
+#endif
 
 // Универсальный FlowLayout на основе Layout API (macOS 13+)
 @available(macOS 13.0, iOS 16.0, *)
@@ -460,6 +615,8 @@ private struct TagSection: View {
     let title: String
     let color: Color
     let tags: [String]
+    var onOpenTag: ((String) -> Void)? = nil
+    var onCopyTag: ((String) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -479,7 +636,7 @@ private struct TagSection: View {
                     .help("Copy section tags")
                 #endif
             }
-            TagFlowView(tags: tags)
+            TagFlowView(tags: tags, onOpenTag: onOpenTag, onCopyTag: onCopyTag)
         }
     }
 }
