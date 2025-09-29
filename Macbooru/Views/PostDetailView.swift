@@ -4,6 +4,7 @@ import SwiftUI
 
 #if os(macOS)
     import AppKit
+    import ObjectiveC
 #endif
 
 struct PostDetailView: View {
@@ -54,19 +55,48 @@ struct PostDetailView: View {
                                             width: offset.width + delta.width,
                                             height: offset.height + delta.height
                                         )
-                                        offset = clampedOffset(
+                                        offset = softClampedOffset(
                                             candidate, containerSize: proxy.size,
                                             contentBaseHeight: h)
                                         lastDrag = offset
                                     },
-                                    onMagnify: { scale in
-                                        let new = min(6.0, max(0.5, zoom * scale))
-                                        zoom = new
-                                        lastZoom = new
-                                        // после изменения зума — скорректировать оффсет в допустимые пределы
-                                        offset = clampedOffset(
-                                            offset, containerSize: proxy.size, contentBaseHeight: h)
-                                    }
+                                    onPanEnd: {
+                                        withAnimation(.easeOut(duration: 0.15)) {
+                                            offset = hardClampedOffset(
+                                                offset, containerSize: proxy.size,
+                                                contentBaseHeight: h)
+                                        }
+                                        lastDrag = offset
+                                    },
+                                    onMagnify: { scale, location in
+                                        let old = zoom
+                                        var next = min(6.0, max(0.5, old * scale))
+                                        // удерживаем фокус: корректируем offset так, чтобы точка под курсором оставалась на месте
+                                        if old != 0, next != old {
+                                            let f = next / old
+                                            let center = CGPoint(
+                                                x: proxy.size.width / 2,
+                                                y: proxy.size.height / 2
+                                            )
+                                            let dx = (location.x - center.x) * (f - 1)
+                                            let dy = (location.y - center.y) * (f - 1)
+                                            offset = CGSize(
+                                                width: offset.width - dx,
+                                                height: offset.height - dy
+                                            )
+                                        }
+                                        zoom = next
+                                        lastZoom = next
+                                        // после изменения зума — подправим оффсет к жёстким пределам
+                                        offset = hardClampedOffset(
+                                            offset, containerSize: proxy.size,
+                                            contentBaseHeight: h)
+                                    },
+                                    onDoubleClick: { _ in
+                                        // Fit по двойному клику
+                                        resetZoom()
+                                    },
+                                    buildContextMenu: { makeArtContextMenu() }
                                 )
                             )
                         #else
@@ -87,11 +117,16 @@ struct PostDetailView: View {
                                             width: lastDrag.width + g.translation.width,
                                             height: lastDrag.height + g.translation.height
                                         )
-                                        offset = clampedOffset(
+                                        offset = softClampedOffset(
                                             candidate, containerSize: proxy.size,
                                             contentBaseHeight: h)
                                     }
                                     .onEnded { _ in
+                                        withAnimation(.easeOut(duration: 0.15)) {
+                                            offset = hardClampedOffset(
+                                                offset, containerSize: proxy.size,
+                                                contentBaseHeight: h)
+                                        }
                                         lastDrag = offset
                                     }
                             )
@@ -125,29 +160,102 @@ struct PostDetailView: View {
                     .padding(8)
                 }
 
-                // Действия
+                // Действия (компактно)
                 HStack(spacing: 12) {
-                    if let url = post.fileURL {
-                        Link(destination: url) { Label("Open original", systemImage: "safari") }
+                    // Группа меню с собственной контрастной подложкой
+                    HStack(spacing: 12) {
+                        Menu {
+                            Button("Open post page", systemImage: "link") {
+                                #if os(macOS)
+                                    NSWorkspace.shared.open(pageURL)
+                                #endif
+                            }
+                            if let u = post.largeURL {
+                                Button("Open large", systemImage: "safari") {
+                                    #if os(macOS)
+                                        NSWorkspace.shared.open(u)
+                                    #endif
+                                }
+                            }
+                            if let u = post.fileURL {
+                                Button("Open original", systemImage: "safari") {
+                                    #if os(macOS)
+                                        NSWorkspace.shared.open(u)
+                                    #endif
+                                }
+                            }
+                            if let src = post.source, let u = URL(string: src) {
+                                Button("Open source", systemImage: "safari") {
+                                    #if os(macOS)
+                                        NSWorkspace.shared.open(u)
+                                    #endif
+                                }
+                            }
+                        } label: {
+                            Label("Open", systemImage: "safari")
+                        }
+                        .menuStyle(.borderlessButton)
+
+                        Menu {
+                            Button("Copy post URL", systemImage: "link") { copyPostURL() }
+                            if post.fileURL != nil || post.largeURL != nil {
+                                Button("Copy image", systemImage: "photo.on.rectangle") {
+                                    Task { await copyImageToPasteboard() }
+                                }
+                            }
+                            if post.fileURL != nil {
+                                Button("Copy original URL", systemImage: "link.badge.plus") {
+                                    copyOriginalURL()
+                                }
+                            }
+                            if let src = post.source, URL(string: src) != nil {
+                                Button("Copy source URL", systemImage: "doc.on.doc") {
+                                    copySourceURL()
+                                }
+                            }
+                            Divider()
+                            Button("Copy tags", systemImage: "doc.on.doc") {
+                                copyTagsToPasteboard()
+                            }
+                        } label: {
+                            Label("Copy", systemImage: "doc.on.doc")
+                        }
+                        .menuStyle(.borderlessButton)
+
+                        Menu {
+                            Button("Reveal Downloads Folder", systemImage: "folder") {
+                                revealDownloadsFolder()
+                            }
+                        } label: {
+                            Label("More", systemImage: "ellipsis.circle")
+                        }
+                        .menuStyle(.borderlessButton)
                     }
-                    if let url = post.largeURL {
-                        Link(destination: url) { Label("Open large", systemImage: "safari") }
-                    }
-                    Link(destination: pageURL) { Label("Open post page", systemImage: "link") }
-                    Button {
-                        copyTagsToPasteboard()
-                    } label: {
-                        Label("Copy tags", systemImage: "doc.on.doc")
-                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule(style: .continuous).fill(.ultraThinMaterial)
+                    )
+                    .overlay(
+                        Capsule(style: .continuous)
+                            .strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+
                     Button {
                         Task { await downloadBestImage() }
                     } label: {
                         Label("Download", systemImage: "tray.and.arrow.down")
                     }
                     .disabled(bestImageCandidates.isEmpty)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.accentColor)
+                    .buttonBorderShape(.capsule)
+
                     Spacer()
                 }
-                .buttonStyle(.borderedProminent)
+                // Контрастные кнопки/меню под артом — стили даём локально,
+                // чтобы Menu-лейблы не затирались глобальным стилем
                 .controlSize(.large)
                 .font(.callout)
                 .padding(.top, 4)
@@ -366,6 +474,57 @@ struct PostDetailView: View {
         return CGSize(width: clampedX, height: clampedY)
     }
 
+    // Мягкий кламп (фрикция у краёв) — чем дальше за пределы, тем сильнее сжатие
+    private func softClampedOffset(
+        _ candidate: CGSize, containerSize: CGSize, contentBaseHeight: CGFloat
+    ) -> CGSize {
+        // если кандидат внутри — оставляем как есть; если вышли — сжимаем превышение коэффициентом, оставляя небольшой оверсролл
+        let allow = allowedHalfOverflow(
+            containerSize: containerSize, contentBaseHeight: contentBaseHeight)
+        let k: CGFloat = 0.35  // коэффициент «фрикции»
+        let overX = overflow(candidate.width, allow: allow.x)
+        let overY = overflow(candidate.height, allow: allow.y)
+        let softX = candidate.width - sign(candidate.width) * max(0, abs(overX)) * (1 - k)
+        let softY = candidate.height - sign(candidate.height) * max(0, abs(overY)) * (1 - k)
+        // НЕ делаем жёсткий кламп во время жеста — хотим небольшой оверсролл для «пружинки»
+        return CGSize(width: softX, height: softY)
+    }
+
+    private func hardClampedOffset(
+        _ candidate: CGSize, containerSize: CGSize, contentBaseHeight: CGFloat
+    ) -> CGSize {
+        clampedOffset(candidate, containerSize: containerSize, contentBaseHeight: contentBaseHeight)
+    }
+
+    private func allowedHalfOverflow(containerSize: CGSize, contentBaseHeight: CGFloat) -> (
+        x: CGFloat, y: CGFloat
+    ) {
+        // пересчитываем текущие contentWidth/Height по той же логике, что и в clampedOffset
+        var contentWidth: CGFloat
+        var contentHeight: CGFloat
+        if let w = post.width, let h = post.height, w > 0, h > 0 {
+            let aspect = CGFloat(w) / CGFloat(h)
+            let baseWidthFit = min(containerSize.width, contentBaseHeight * aspect)
+            let baseHeightFit = min(contentBaseHeight, containerSize.width / aspect)
+            contentWidth = baseWidthFit * zoom
+            contentHeight = baseHeightFit * zoom
+        } else {
+            contentWidth = containerSize.width * zoom
+            contentHeight = contentBaseHeight * zoom
+        }
+        let allowX = max(0, (contentWidth - containerSize.width) / 2)
+        let allowY = max(0, (contentHeight - containerSize.height) / 2)
+        return (allowX, allowY)
+    }
+
+    private func overflow(_ value: CGFloat, allow: CGFloat) -> CGFloat {
+        if value > allow { return value - allow }
+        if value < -allow { return value + allow }
+        return 0
+    }
+
+    private func sign(_ value: CGFloat) -> CGFloat { value >= 0 ? 1 : -1 }
+
     private func copyTagsToPasteboard() {
         #if os(macOS)
             if let s = post.tagString, !s.isEmpty {
@@ -416,6 +575,273 @@ struct PostDetailView: View {
             pb.setString(tag, forType: .string)
             withAnimation { saveMessage = "Tag copied: \(tag)" }
         #endif
+    }
+
+    private func copyOriginalURL() {
+        #if os(macOS)
+            guard let url = post.fileURL else { return }
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(url.absoluteString, forType: .string)
+            withAnimation { saveMessage = "Original URL copied" }
+        #endif
+    }
+
+    private func copyPostURL() {
+        #if os(macOS)
+            let url = pageURL
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(url.absoluteString, forType: .string)
+            withAnimation { saveMessage = "Post URL copied" }
+        #endif
+    }
+
+    @MainActor
+    private func copyImageToPasteboard() async {
+        #if os(macOS)
+            guard let url = post.fileURL ?? post.largeURL ?? post.previewURL else { return }
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                guard let image = NSImage(data: data) else {
+                    withAnimation { saveMessage = "Cannot decode image" }
+                    return
+                }
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.writeObjects([image])
+                withAnimation { saveMessage = "Image copied" }
+            } catch {
+                withAnimation { saveMessage = "Copy failed: \(error.localizedDescription)" }
+            }
+        #endif
+    }
+
+    private func copySourceURL() {
+        #if os(macOS)
+            guard let src = post.source, let url = URL(string: src) else { return }
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(url.absoluteString, forType: .string)
+            withAnimation { saveMessage = "Source URL copied" }
+        #endif
+    }
+
+    private func revealDownloadsFolder() {
+        #if os(macOS)
+            do {
+                let downloads = try FileManager.default.url(
+                    for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil,
+                    create: false)
+                NSWorkspace.shared.activateFileViewerSelecting([downloads])
+            } catch {
+                withAnimation {
+                    saveMessage = "Cannot open Downloads: \(error.localizedDescription)"
+                }
+            }
+        #endif
+    }
+
+    // MARK: - Контекстное меню по арту (macOS)
+    #if os(macOS)
+        private func makeArtContextMenu() -> NSMenu {
+            let menu = NSMenu()
+
+            // Зум
+            menu.addItem(
+                withTitle: "Fit", action: #selector(MenuActionTarget.fit), keyEquivalent: "f")
+            menu.addItem(
+                withTitle: "Zoom In", action: #selector(MenuActionTarget.zoomIn), keyEquivalent: "+"
+            )
+            menu.addItem(
+                withTitle: "Zoom Out", action: #selector(MenuActionTarget.zoomOut),
+                keyEquivalent: "-")
+            menu.addItem(NSMenuItem.separator())
+
+            // Позиционирование
+            menu.addItem(
+                withTitle: "Center", action: #selector(MenuActionTarget.center), keyEquivalent: "")
+            menu.addItem(NSMenuItem.separator())
+
+            // Открыть
+            let openPost = NSMenuItem(
+                title: "Open Post Page", action: #selector(MenuActionTarget.openPostPage),
+                keyEquivalent: "")
+            menu.addItem(openPost)
+            if post.largeURL != nil {
+                menu.addItem(
+                    NSMenuItem(
+                        title: "Open Large", action: #selector(MenuActionTarget.openLarge),
+                        keyEquivalent: ""))
+            }
+            if post.fileURL != nil {
+                menu.addItem(
+                    NSMenuItem(
+                        title: "Open Original", action: #selector(MenuActionTarget.openOriginal),
+                        keyEquivalent: ""))
+            }
+            menu.addItem(NSMenuItem.separator())
+
+            // Буфер/загрузка
+            menu.addItem(
+                NSMenuItem(
+                    title: "Copy Tags", action: #selector(MenuActionTarget.copyTags),
+                    keyEquivalent: ""))
+            menu.addItem(
+                NSMenuItem(
+                    title: "Copy Post URL",
+                    action: #selector(MenuActionTarget.copyPostURL),
+                    keyEquivalent: ""))
+            if post.fileURL != nil {
+                menu.addItem(
+                    NSMenuItem(
+                        title: "Copy Original URL",
+                        action: #selector(MenuActionTarget.copyOriginalURL),
+                        keyEquivalent: ""))
+            }
+            if post.fileURL != nil || post.largeURL != nil || post.previewURL != nil {
+                menu.addItem(
+                    NSMenuItem(
+                        title: "Copy Image",
+                        action: #selector(MenuActionTarget.copyImage),
+                        keyEquivalent: ""))
+            }
+            if let src = post.source, URL(string: src) != nil {
+                menu.addItem(
+                    NSMenuItem(
+                        title: "Copy Source URL",
+                        action: #selector(MenuActionTarget.copySourceURL),
+                        keyEquivalent: ""))
+            }
+            menu.addItem(
+                NSMenuItem(
+                    title: "Download Best Image", action: #selector(MenuActionTarget.download),
+                    keyEquivalent: ""))
+            menu.addItem(
+                NSMenuItem(
+                    title: "Reveal Downloads Folder",
+                    action: #selector(MenuActionTarget.revealDownloadsFolder),
+                    keyEquivalent: ""))
+
+            // Таргет для действий
+            let target = MenuActionTarget(
+                fitAction: { resetZoom() },
+                zoomInAction: { stepZoom(in: +1) },
+                zoomOutAction: { stepZoom(in: -1) },
+                centerAction: { withAnimation(.easeInOut(duration: 0.15)) { offset = .zero } },
+                openPostPageAction: { NSWorkspace.shared.open(pageURL) },
+                openLargeAction: { if let u = post.largeURL { NSWorkspace.shared.open(u) } },
+                openOriginalAction: { if let u = post.fileURL { NSWorkspace.shared.open(u) } },
+                copyTagsAction: { copyTagsToPasteboard() },
+                copyPostURLAction: { copyPostURL() },
+                copyOriginalURLAction: { copyOriginalURL() },
+                copyImageAction: { Task { await copyImageToPasteboard() } },
+                copySourceURLAction: { copySourceURL() },
+                downloadAction: { Task { await downloadBestImage() } },
+                revealDownloadsFolderAction: { revealDownloadsFolder() }
+            )
+            // Назначаем целевой объект меню и действию
+            for item in menu.items where item.action != nil {
+                item.target = target
+            }
+            // Удерживаем target живым до закрытия меню
+            objc_setAssociatedObject(
+                menu, &MenuActionTarget.associatedKey, target, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+
+            return menu
+        }
+
+        private final class MenuActionTarget: NSObject {
+            static var associatedKey: UInt8 = 0
+            let fitAction: () -> Void
+            let zoomInAction: () -> Void
+            let zoomOutAction: () -> Void
+            let centerAction: () -> Void
+            let openPostPageAction: () -> Void
+            let openLargeAction: () -> Void
+            let openOriginalAction: () -> Void
+            let copyTagsAction: () -> Void
+            let copyPostURLAction: () -> Void
+            let copyOriginalURLAction: () -> Void
+            let copyImageAction: () -> Void
+            let copySourceURLAction: () -> Void
+            let downloadAction: () -> Void
+            let revealDownloadsFolderAction: () -> Void
+
+            init(
+                fitAction: @escaping () -> Void,
+                zoomInAction: @escaping () -> Void,
+                zoomOutAction: @escaping () -> Void,
+                centerAction: @escaping () -> Void,
+                openPostPageAction: @escaping () -> Void,
+                openLargeAction: @escaping () -> Void,
+                openOriginalAction: @escaping () -> Void,
+                copyTagsAction: @escaping () -> Void,
+                copyPostURLAction: @escaping () -> Void,
+                copyOriginalURLAction: @escaping () -> Void,
+                copyImageAction: @escaping () -> Void,
+                copySourceURLAction: @escaping () -> Void,
+                downloadAction: @escaping () -> Void,
+                revealDownloadsFolderAction: @escaping () -> Void
+            ) {
+                self.fitAction = fitAction
+                self.zoomInAction = zoomInAction
+                self.zoomOutAction = zoomOutAction
+                self.centerAction = centerAction
+                self.openPostPageAction = openPostPageAction
+                self.openLargeAction = openLargeAction
+                self.openOriginalAction = openOriginalAction
+                self.copyTagsAction = copyTagsAction
+                self.copyPostURLAction = copyPostURLAction
+                self.copyOriginalURLAction = copyOriginalURLAction
+                self.copyImageAction = copyImageAction
+                self.copySourceURLAction = copySourceURLAction
+                self.downloadAction = downloadAction
+                self.revealDownloadsFolderAction = revealDownloadsFolderAction
+            }
+
+            @objc func fit() { fitAction() }
+            @objc func zoomIn() { zoomInAction() }
+            @objc func zoomOut() { zoomOutAction() }
+            @objc func center() { centerAction() }
+            @objc func openPostPage() { openPostPageAction() }
+            @objc func openLarge() { openLargeAction() }
+            @objc func openOriginal() { openOriginalAction() }
+            @objc func copyTags() { copyTagsAction() }
+            @objc func copyPostURL() { copyPostURLAction() }
+            @objc func copyOriginalURL() { copyOriginalURLAction() }
+            @objc func copyImage() { copyImageAction() }
+            @objc func copySourceURL() { copySourceURLAction() }
+            @objc func download() { downloadAction() }
+            @objc func revealDownloadsFolder() { revealDownloadsFolderAction() }
+        }
+    #endif
+}
+
+// Контрастный ярлык для Menu-кнопок, чтобы они выглядели как prominent-кнопки
+private struct ProminentMenuLabel: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .foregroundStyle(Color.white)
+            .background(
+                RoundedRectangle(cornerRadius: 100, style: .continuous)
+                    .fill(Color.accentColor)
+            )
+            .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+    }
+}
+
+extension View {
+    fileprivate func prominentMenuLabel() -> some View { self.modifier(ProminentMenuLabel()) }
+    @ViewBuilder
+    fileprivate func hideMenuIndicatorIfAvailable() -> some View {
+        if #available(macOS 14.0, iOS 17.0, *) {
+            self.menuIndicator(.hidden)
+        } else {
+            self
+        }
     }
 }
 
@@ -642,16 +1068,22 @@ private struct TagSection: View {
 }
 
 #if os(macOS)
-    // MARK: - Панорамирование и зум (трекпад) через AppKit
+    // MARK: - Панорамирование и зум (трекпад + мышь) через AppKit
     private struct PanZoomProxy: NSViewRepresentable {
         typealias NSViewType = PanZoomNSView
         var onPan: (CGSize) -> Void
-        var onMagnify: (CGFloat) -> Void
+        var onPanEnd: (() -> Void)? = nil
+        var onMagnify: (CGFloat, CGPoint) -> Void
+        var onDoubleClick: ((CGPoint) -> Void)? = nil
+        var buildContextMenu: (() -> NSMenu)? = nil
 
         func makeNSView(context: Context) -> PanZoomNSView {
             let v = PanZoomNSView()
             v.onPan = onPan
+            v.onPanEnd = onPanEnd
             v.onMagnify = onMagnify
+            v.onDoubleClick = onDoubleClick
+            v.buildContextMenu = buildContextMenu
             v.wantsLayer = true
             v.layer?.backgroundColor = NSColor.clear.cgColor
             return v
@@ -659,23 +1091,68 @@ private struct TagSection: View {
 
         func updateNSView(_ nsView: PanZoomNSView, context: Context) {
             nsView.onPan = onPan
+            nsView.onPanEnd = onPanEnd
             nsView.onMagnify = onMagnify
+            nsView.onDoubleClick = onDoubleClick
+            nsView.buildContextMenu = buildContextMenu
         }
     }
 
     private final class PanZoomNSView: NSView {
         var onPan: ((CGSize) -> Void)?
-        var onMagnify: ((CGFloat) -> Void)?
+        var onPanEnd: (() -> Void)?
+        var onMagnify: ((CGFloat, CGPoint) -> Void)?
+        var onDoubleClick: ((CGPoint) -> Void)?
+        var buildContextMenu: (() -> NSMenu)?
+
+        private var lastMousePoint: NSPoint?
 
         override var acceptsFirstResponder: Bool { true }
 
         override func scrollWheel(with event: NSEvent) {
             onPan?(CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY))
+            // Завершение жеста скролла/панорамирования
+            if event.phase == .ended || event.momentumPhase == .ended {
+                onPanEnd?()
+            }
         }
 
         override func magnify(with event: NSEvent) {
             let scale = 1 + event.magnification
-            onMagnify?(scale)
+            let p = convert(event.locationInWindow, from: nil)
+            onMagnify?(scale, p)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            let p = convert(event.locationInWindow, from: nil)
+            if event.clickCount == 2 {
+                onDoubleClick?(p)
+                return
+            }
+            lastMousePoint = p
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            let p = convert(event.locationInWindow, from: nil)
+            if let last = lastMousePoint {
+                let dx = p.x - last.x
+                let dy = p.y - last.y
+                onPan?(CGSize(width: dx, height: dy))
+            }
+            lastMousePoint = p
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            lastMousePoint = nil
+            onPanEnd?()
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            if let menu = buildContextMenu?() {
+                NSMenu.popUpContextMenu(menu, with: event, for: self)
+            } else {
+                super.rightMouseDown(with: event)
+            }
         }
     }
 #endif
