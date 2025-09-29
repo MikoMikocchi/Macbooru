@@ -86,7 +86,7 @@ xcodebuild -scheme Macbooru -project Macbooru.xcodeproj -destination 'platform=m
 - Нет экрана логина и хранения API ключа в Keychain
 - Нет избранного/голосований/комментариев/пулов/тегов
 - Нет Nuke/DataCache: текущий лоадер работает, но без дискового LRU политики для JSON
-- Нет локализаций ru/en (M6), пока строки зашиты в коде
+- Нет локализаций ru/en, пока строки зашиты в коде
 - Нет CI (GitHub Actions / Xcode Cloud) и SwiftLint/SwiftFormat (в планах)
 
 ## Вклад в проект
