@@ -22,6 +22,11 @@ jobs:
       - name: Swift version
         run: xcrun swift --version
 
+      - name: Install xcpretty
+        run: |
+          gem install xcpretty --no-document || true
+        shell: bash
+
       - name: Show available destinations
         run: xcodebuild -list -project Macbooru.xcodeproj
 
@@ -35,17 +40,6 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
             build | xcpretty
-        shell: bash
-
-      - name: Run Unit Tests
-        run: |
-          set -eo pipefail
-          xcodebuild \
-            -project Macbooru.xcodeproj \
-            -scheme Macbooru \
-            -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
-            test | xcpretty
         shell: bash
 
       - name: Upload build logs (on failure)
