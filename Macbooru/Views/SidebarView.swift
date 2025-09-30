@@ -50,6 +50,14 @@ struct SidebarView: View {
                                 .help("Save current query")
                         }
                         .buttonStyle(.borderless)
+                        Button {
+                            clearSearch()
+                        } label: {
+                            Label("Clear", systemImage: "xmark.circle")
+                                .labelStyle(.iconOnly)
+                                .help("Clear tags and filters")
+                        }
+                        .buttonStyle(.borderless)
                     }
 
                     .onChange(of: state.tags) { newValue in
@@ -271,6 +279,18 @@ struct SidebarView: View {
 }
 
 extension SidebarView {
+    fileprivate func clearSearch() {
+        suggestions.removeAll()
+        state.tags = ""
+        state.rating = .any
+        state.sort = .recent
+        state.resetForNewSearch()
+        onSearch?()
+        // Вернём фокус в поле ввода для продолжения работы
+        #if os(macOS)
+            isSearchFocused = true
+        #endif
+    }
     fileprivate func scheduleAutocomplete(for input: String) {
         let token = lastToken(in: input)
         tagQuery = token

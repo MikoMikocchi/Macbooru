@@ -66,6 +66,24 @@ struct PostTileView: View {
             if let url = post.fileURL { Link("Open original in Browser", destination: url) }
             if let url = post.largeURL { Link("Open large in Browser", destination: url) }
             if let url = post.previewURL { Link("Open preview in Browser", destination: url) }
+            if let src = post.source, let u = URL(string: src) {
+                Divider()
+                Link("Open source", destination: u)
+            }
+            Divider()
+            if let url = post.fileURL {
+                Button("Copy original URL") { copyToClipboard(url.absoluteString) }
+            }
+            if let url = post.largeURL {
+                Button("Copy large URL") { copyToClipboard(url.absoluteString) }
+            }
+            if let url = post.previewURL {
+                Button("Copy preview URL") { copyToClipboard(url.absoluteString) }
+            }
+            Button("Copy tags") {
+                let tags = post.allTags.joined(separator: " ")
+                copyToClipboard(tags)
+            }
         }
     }
 }
@@ -136,3 +154,14 @@ private struct Badge: View {
         }
     }
 #endif
+
+// MARK: - Clipboard helpers
+private func copyToClipboard(_ text: String) {
+    #if os(macOS)
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+    #else
+        UIPasteboard.general.string = text
+    #endif
+}
