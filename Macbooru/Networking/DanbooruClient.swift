@@ -94,4 +94,29 @@ final class DanbooruClient {
             throw APIError.decoding(error)
         }
     }
+
+    func fetchTags(prefix: String, limit: Int = 10) async throws -> [Tag] {
+        guard !prefix.isEmpty else { return [] }
+        var comps = URLComponents(
+            url: config.baseURL.appendingPathComponent("/tags.json"), resolvingAgainstBaseURL: false
+        )!
+        comps.queryItems = [
+            URLQueryItem(name: "search[name_matches]", value: prefix + "*"),
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "search[order]", value: "count"),
+        ]
+        var req = URLRequest(url: comps.url!)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        if let user = config.username, let key = config.apiKey {
+            let authString = "\(user):\(key)".data(using: .utf8)!.base64EncodedString()
+            req.setValue("Basic \(authString)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        let decoder = DanbooruClient.makeDecoder()
+        return try decoder.decode([Tag].self, from: data)
+    }
 }
