@@ -139,6 +139,7 @@ struct RemoteImage: View {
     var animateUpgrades: Bool = false
     var interpolation: Image.Interpolation = .high
     var decoratedBackground: Bool = true
+    var cornerRadius: CGFloat = 8
 
     @State private var image: PlatformImage? = nil
     @State private var pixelCount: Int = 0
@@ -186,7 +187,7 @@ struct RemoteImage: View {
                 }
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .contentShape(Rectangle())
         .task(id: candidates) { await load() }
     }

@@ -20,7 +20,8 @@ struct PostTileView: View {
                 animateFirstAppearance: true,
                 animateUpgrades: false,
                 interpolation: .medium,
-                decoratedBackground: false
+                decoratedBackground: false,
+                cornerRadius: 10
             )
             // Усиленный блюр самого изображения для NSFW
             .blur(
@@ -33,7 +34,7 @@ struct PostTileView: View {
                     }
                 }()
             )
-            .padding(6)
+            .padding(0)
             .overlay(
                 // Накладываем блюр/материал поверх для NSFW, если включено в настройках
                 Group {
@@ -57,23 +58,17 @@ struct PostTileView: View {
             // Инфо-строка
             HStack(spacing: 8) {
                 if let r = post.rating { SolidRatingChip(rating: r) }
-                if let w = post.width, let h = post.height { SizeChip(width: w, height: h) }
+                if let w = post.width, let h = post.height { SizeBadge(width: w, height: h) }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .padding(.bottom, 6)
+            .padding(.vertical, 6)
             .opacity(hover ? 1 : 0.92)
         }
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
         // Используются унифицированные компоненты RatingChip/ScoreChip/SizeChip из Theme.swift
         .fixedSize(horizontal: false, vertical: true)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
-        )
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .shadow(color: .black.opacity(hover ? 0.22 : 0.0), radius: hover ? 12 : 0, y: hover ? 4 : 0)
         .onHover { hover = $0 }
         .contextMenu {
             if let url = post.fileURL { Link("Open original in Browser", destination: url) }
@@ -140,6 +135,24 @@ private struct SolidRatingChip: View {
         .background(bg, in: Capsule())
         .foregroundStyle(Color.white)
         .shadow(color: bg.opacity(0.3), radius: 3, y: 1)
+    }
+}
+
+// Локальный компактный бейдж размера, чтобы не зависеть от Theme
+private struct SizeBadge: View {
+    let width: Int
+    let height: Int
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "aspectratio").imageScale(.small)
+            Text("\(width)x\(height)").fontWeight(.medium)
+        }
+        .font(.caption)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.cyan.opacity(0.18), in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.cyan.opacity(0.35), lineWidth: 1))
+        .foregroundStyle(.cyan)
     }
 }
 
