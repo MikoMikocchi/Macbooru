@@ -317,6 +317,36 @@ struct SidebarView: View {
                         .controlSize(.small)
                         .labelsHidden()
                     }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "number.circle.fill").foregroundStyle(.secondary)
+                            Text("Page size").font(.subheadline).fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                        }
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Picker("Page size", selection: $state.pageSize) {
+                            Text("15").tag(15)
+                            Text("30").tag(30)
+                            Text("60").tag(60)
+                        }
+                        .pickerStyle(.segmented)
+                        .controlSize(.small)
+                        .labelsHidden()
+                        .onChange(of: state.pageSize) { _, _ in
+                            state.resetForNewSearch()
+                            onSearch?()
+                        }
+                    }
+                    Toggle(isOn: $state.lowPerformance) {
+                        Label("Low Performance Mode", systemImage: "tortoise")
+                    }
+                    .toggleStyle(.switch)
+                    .onChange(of: state.lowPerformance) { _, _ in
+                        state.resetForNewSearch()
+                        onSearch?()
+                    }
                     Toggle(isOn: $state.blurSensitive) {
                         Label("Blur NSFW (Q/E)", systemImage: "eye.slash")
                     }

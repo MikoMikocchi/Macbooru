@@ -85,8 +85,10 @@ final class SearchState: ObservableObject {
     @Published var tileSize: TileSize = .medium
     @Published var sort: SortMode = .recent
     @Published var page: Int = 1
+    @Published var pageSize: Int = 30
     @Published var searchTrigger: Int = 0
     @Published var blurSensitive: Bool = true
+    @Published var lowPerformance: Bool = false
 
     // составной запрос для Danbooru: rating:*, затем пользовательские теги
     var danbooruQuery: String? {

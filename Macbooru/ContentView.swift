@@ -29,12 +29,6 @@ struct PostGridView: View {
                     .id(post.id)
                     .buttonStyle(.plain)
                     .frame(height: search.tileSize.height)
-                    .onAppear {
-                        // Триггер подгрузки следующей страницы при появлении последних элементов
-                        if post.id == posts.suffix(5).first?.id {
-                            Task { await load(page: search.page) }
-                        }
-                    }
                 }
                 if isLoading { ProgressView().padding() }
             }
@@ -57,14 +51,17 @@ struct PostGridView: View {
             ToolbarItem(placement: .status) {
                 HStack(spacing: 8) {
                     Button {
-                        guard search.page > 2 else { return }
-                        Task { await load(page: max(1, search.page - 2)) }
+                        guard search.page > 1 else { return }
+                        Task { await load(page: max(1, search.page - 1), replace: true) }
                     } label: {
                         Label("Prev", systemImage: "chevron.left")
                     }
-                    .disabled(isLoading || search.page <= 2)
+                    .disabled(isLoading || search.page <= 1)
+                    Text("Page \(search.page)")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.secondary)
                     Button {
-                        Task { await load(page: search.page) }
+                        Task { await load(page: search.page + 1, replace: true) }
                     } label: {
                         Label("Next", systemImage: "chevron.right")
                     }
@@ -98,26 +95,27 @@ struct PostGridView: View {
     private func refresh() async {
         search.page = 1
         posts.removeAll()
-        await load(page: 1)
+        await load(page: 1, replace: true)
     }
 
     @MainActor
-    private func load(page: Int) async {
+    private func load(page: Int, replace: Bool = true) async {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
         do {
             let next: [Post]
             if let q = search.danbooruQuery {
-                next = try await repo.byTags(q, page: page, limit: 30)
+                next = try await repo.byTags(q, page: page, limit: search.pageSize)
             } else {
-                next = try await repo.recent(page: page, limit: 30)
+                next = try await repo.recent(page: page, limit: search.pageSize)
             }
-            // Убираем дубликаты по id, сохраняя порядок
-            let existingIDs = Set(posts.map { $0.id })
-            let filtered = next.filter { !existingIDs.contains($0.id) }
-            posts.append(contentsOf: filtered)
-            self.search.page = page + 1
+            if replace {
+                posts = next
+            } else {
+                posts.append(contentsOf: next)
+            }
+            self.search.page = max(1, page)
         } catch {
             withAnimation {
                 lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"

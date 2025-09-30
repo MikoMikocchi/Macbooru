@@ -17,9 +17,9 @@ struct PostTileView: View {
                 candidates: [post.previewURL, post.largeURL, post.fileURL].compactMap { $0 },
                 height: height,
                 contentMode: .fit,
-                animateFirstAppearance: true,
+                animateFirstAppearance: !search.lowPerformance,
                 animateUpgrades: false,
-                interpolation: .medium,
+                interpolation: search.lowPerformance ? .low : .medium,
                 decoratedBackground: false,
                 cornerRadius: 10
             )
