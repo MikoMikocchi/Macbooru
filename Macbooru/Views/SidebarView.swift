@@ -8,7 +8,7 @@ import SwiftUI
 struct SidebarView: View {
     @ObservedObject var state: SearchState
     var onSearch: (() -> Void)?
-    private let tagsRepo = TagsRepositoryImpl(client: DanbooruClient())
+    @Environment(\.appDependencies) private var dependencies
     private let savedStore = SavedSearchStore()
     private let recentStore = RecentSearchStore()
     @State private var tagQuery: String = ""
@@ -116,10 +116,6 @@ struct SidebarView: View {
                     #if os(macOS)
                         .onExitCommand { suggestions.removeAll() }
                         // Навигация стрелками и выбор Enter (macOS 14+)
-                        .onKeyPress(.upArrow) {
-                            moveSelection(1)
-                            return .handled
-                        }
                         .onKeyPress(.downArrow) {
                             if suggestions.isEmpty {
                                 let token = lastToken(in: state.tags)
@@ -488,7 +484,7 @@ extension SidebarView {
         isLoadingSuggest = true
         defer { isLoadingSuggest = false }
         do {
-            let tags = try await tagsRepo.autocomplete(prefix: prefix, limit: 12)
+            let tags = try await dependencies.autocompleteTags.execute(prefix: prefix, limit: 12)
             suggestions = tags
             selectedIndex = 0
         } catch {

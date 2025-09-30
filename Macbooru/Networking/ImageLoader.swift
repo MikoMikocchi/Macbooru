@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import os
 import SwiftUI
 
 #if os(macOS)
@@ -17,10 +19,51 @@ actor ImageMemoryCache {
     func set(_ image: PlatformImage, for url: URL) { cache.setObject(image, forKey: url as NSURL) }
 }
 
+actor ImageDiskCache {
+    static let shared = ImageDiskCache()
+
+    private let directory: URL
+    private let fileManager: FileManager
+
+    init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+        let base = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let dir = base?.appendingPathComponent("MacbooruImageCache", isDirectory: true)
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(
+                "MacbooruImageCache",
+                isDirectory: true
+            )
+        directory = dir
+        if !fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+
+    func data(for url: URL) -> Data? {
+        let path = directory.appendingPathComponent(filename(for: url))
+        return try? Data(contentsOf: path)
+    }
+
+    func store(_ data: Data, for url: URL) {
+        let path = directory.appendingPathComponent(filename(for: url))
+        do {
+            try data.write(to: path, options: [.atomic])
+        } catch {
+            Logger.caching.warning("Failed to write image cache: \(error.localizedDescription)")
+        }
+    }
+
+    private func filename(for url: URL) -> String {
+        let hash = SHA256.hash(data: Data(url.absoluteString.utf8))
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
 final class ThrottledImageLoader {
     static let shared = ThrottledImageLoader()
 
     private let session: URLSession
+    private let logger = Logger.imageLoader
 
     private init() {
         let cfg = URLSessionConfiguration.default
@@ -40,6 +83,15 @@ final class ThrottledImageLoader {
 
     func load(_ url: URL) async throws -> PlatformImage {
         if let cached = await ImageMemoryCache.shared.image(for: url) { return cached }
+        if let diskData = await ImageDiskCache.shared.data(for: url) {
+            if let diskImage = try? await decodeImage(data: diskData) {
+                await ImageMemoryCache.shared.set(diskImage, for: url)
+                logger.debug("Loaded image from disk cache: \(url.lastPathComponent, privacy: .public)")
+                return diskImage
+            } else {
+                logger.debug("Disk cache entry failed to decode for \(url.lastPathComponent, privacy: .public)")
+            }
+        }
         var req = URLRequest(url: url)
         req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
         req.setValue("image/jpeg,image/png,*/*;q=0.5", forHTTPHeaderField: "Accept")
@@ -54,62 +106,16 @@ final class ThrottledImageLoader {
                 else {
                     throw URLError(.badServerResponse)
                 }
-                let ctype = http.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
-                // Диагностика: какой формат реально приходит (только в DEBUG)
-                #if DEBUG
-                    print("Image content-type=\(ctype) url=\(url.lastPathComponent)")
-                #endif
-                #if os(macOS)
-                    // Надежное декодирование через NSBitmapImageRep -> NSImage с валидным size
-                    let img: NSImage? = await MainActor.run {
-                        if let rep = NSBitmapImageRep(data: data) {
-                            // Обеспечим, что размер не нулевой
-                            let size = NSSize(
-                                width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
-                            rep.size = size
-                            let image = NSImage(size: size)
-                            image.addRepresentation(rep)
-                            image.isTemplate = false
-                            return image
-                        }
-                        if let src = CGImageSourceCreateWithData(data as CFData, nil),
-                            let cg = CGImageSourceCreateImageAtIndex(
-                                src, 0, [kCGImageSourceShouldCache: true] as CFDictionary)
-                        {
-                            let size = NSSize(width: cg.width, height: cg.height)
-                            let image = NSImage(cgImage: cg, size: size)
-                            image.isTemplate = false
-                            return image
-                        }
-                        if let image = NSImage(data: data) {
-                            if image.size == .zero,
-                                let rep = image.representations.first as? NSBitmapImageRep
-                            {
-                                image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
-                            }
-                            image.isTemplate = false
-                            return image
-                        }
-                        return nil
-                    }
-                    guard let img else { throw URLError(.cannotDecodeContentData) }
-                    #if DEBUG
-                        print(
-                            "Decoded image size: \(Int(img.size.width))x\(Int(img.size.height)) for \(url.lastPathComponent)"
-                        )
-                    #endif
-                #else
-                    guard let img = UIImage(data: data, scale: UIScreen.main.scale) else {
-                        throw URLError(.cannotDecodeContentData)
-                    }
-                #endif
-                await ImageMemoryCache.shared.set(img, for: url)
-                return img
+                let image = try await decodeImage(data: data)
+                await ImageMemoryCache.shared.set(image, for: url)
+                await ImageDiskCache.shared.store(data, for: url)
+                logger.debug("Loaded image from network: \(url.lastPathComponent, privacy: .public)")
+                return image
             } catch {
                 lastError = error
-                #if DEBUG
-                    print("Image load error: \(url.absoluteString) — \(error.localizedDescription)")
-                #endif
+                logger.error(
+                    "Image load error (attempt \(attempt + 1, privacy: .public)) for \(url.absoluteString, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
                 let delay = UInt64(pow(2.0, Double(attempt)) * 200_000_000)  // 0.2s, 0.4s, 0.8s
                 try? await Task.sleep(nanoseconds: delay)
             }
@@ -128,6 +134,53 @@ final class ThrottledImageLoader {
             }
         }
         throw URLError(.cannotLoadFromNetwork)
+    }
+
+    private func decodeImage(data: Data) async throws -> PlatformImage {
+#if os(macOS)
+        let image: NSImage? = await MainActor.run {
+            if let rep = NSBitmapImageRep(data: data) {
+                let size = NSSize(width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
+                rep.size = size
+                let image = NSImage(size: size)
+                image.addRepresentation(rep)
+                image.isTemplate = false
+                return image
+            }
+            if let src = CGImageSourceCreateWithData(data as CFData, nil),
+                let cg = CGImageSourceCreateImageAtIndex(
+                    src, 0, [kCGImageSourceShouldCache: true] as CFDictionary)
+            {
+                let size = NSSize(width: cg.width, height: cg.height)
+                let image = NSImage(cgImage: cg, size: size)
+                image.isTemplate = false
+                return image
+            }
+            if let image = NSImage(data: data) {
+                if image.size == .zero,
+                    let rep = image.representations.first as? NSBitmapImageRep
+                {
+                    image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                }
+                image.isTemplate = false
+                return image
+            }
+            return nil
+        }
+        guard let image else { throw URLError(.cannotDecodeContentData) }
+        logger.debug(
+            "Decoded image (macOS) \(Int(image.size.width))x\(Int(image.size.height))"
+        )
+        return image
+#else
+        guard let image = UIImage(data: data, scale: UIScreen.main.scale) else {
+            throw URLError(.cannotDecodeContentData)
+        }
+        logger.debug(
+            "Decoded image (iOS) \(Int(image.size.width))x\(Int(image.size.height))"
+        )
+        return image
+#endif
     }
 }
 
@@ -264,6 +317,12 @@ struct RemoteImage: View {
             return max(1, Int(img.size.width * scale) * Int(img.size.height * scale))
         #endif
     }
+}
+
+private extension Logger {
+    static let subsystem = Bundle.main.bundleIdentifier ?? "Macbooru"
+    static let imageLoader = Logger(subsystem: subsystem, category: "ImageLoader")
+    static let caching = Logger(subsystem: subsystem, category: "Caching")
 }
 
 // Вспомогательный модификатор для выбора scaledToFit/scaledToFill

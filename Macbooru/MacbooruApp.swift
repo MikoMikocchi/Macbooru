@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct MacbooruApp: App {
+    private let dependencies = AppDependencies.makeDefault()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(\.appDependencies, dependencies)
         }
         .commands { AppShortcuts() }
     }

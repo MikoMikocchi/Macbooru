@@ -10,10 +10,10 @@ import SwiftUI
 
 struct PostGridView: View {
     @ObservedObject var search: SearchState
+    @Environment(\.appDependencies) private var dependencies
     @State private var posts: [Post] = []
     @State private var isLoading = false
     @State private var lastErrorMessage: String? = nil
-    private let repo = PostsRepositoryImpl(client: DanbooruClient())
     @State private var columns: [GridItem] = []
     private let gridSpacing: CGFloat = 24
 
@@ -120,12 +120,11 @@ struct PostGridView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let next: [Post]
-            if let q = search.danbooruQuery {
-                next = try await repo.byTags(q, page: page, limit: search.pageSize)
-            } else {
-                next = try await repo.recent(page: page, limit: search.pageSize)
-            }
+            let next = try await dependencies.searchPosts.execute(
+                query: search.danbooruQuery,
+                page: page,
+                limit: search.pageSize
+            )
             if replace {
                 posts = next
             } else {
