@@ -6,6 +6,11 @@ struct SettingsView: View {
     @State private var apiKey: String = ""
     @State private var status: StatusMessage? = nil
     @State private var isSaving = false
+    @State private var cacheLimitMB: Double = 256
+    @State private var appliedCacheLimitMB: Double = 256
+    @State private var cacheUsageMB: Double = 0
+    @State private var isUpdatingCacheLimit = false
+    @State private var isClearingCache = false
 
     enum StatusMessage: Equatable {
         case success(String)
@@ -62,6 +67,40 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Кеш изображений") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Stepper(value: $cacheLimitMB, in: 64...1024, step: 64) {
+                        Text("Максимальный размер: \(Int(cacheLimitMB)) МБ")
+                    }
+                    HStack {
+                        Button {
+                            applyCacheLimit()
+                        } label: {
+                            if isUpdatingCacheLimit {
+                                ProgressView()
+                            } else {
+                                Label("Применить", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                        .disabled(isUpdatingCacheLimit || Int(cacheLimitMB) == Int(appliedCacheLimitMB))
+
+                        Button(role: .destructive) {
+                            clearCacheStorage()
+                        } label: {
+                            if isClearingCache {
+                                ProgressView()
+                            } else {
+                                Label("Очистить", systemImage: "trash")
+                            }
+                        }
+                        .disabled(isClearingCache || cacheUsageMB <= 0.1)
+                    }
+                    Text("Текущий объём: \(formattedMB(cacheUsageMB)) МБ")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             if let status {
                 Text(status.text)
                     .font(.subheadline)
@@ -71,6 +110,7 @@ struct SettingsView: View {
         }
         .padding()
         .onAppear(perform: loadFromStore)
+        .onAppear(perform: loadCacheSettings)
     }
 
     private func loadFromStore() {
@@ -99,5 +139,52 @@ struct SettingsView: View {
         } catch {
             status = .error("Не удалось удалить: \(error.localizedDescription)")
         }
+    }
+
+    private func loadCacheSettings() {
+        Task {
+            let limit = await ImageDiskCache.shared.limitInMegabytes()
+            let usageBytes = await ImageDiskCache.shared.currentUsageBytes()
+            await MainActor.run {
+                cacheLimitMB = Double(limit)
+                appliedCacheLimitMB = Double(limit)
+                cacheUsageMB = bytesToMB(usageBytes)
+            }
+        }
+    }
+
+    private func applyCacheLimit() {
+        guard Int(cacheLimitMB) != Int(appliedCacheLimitMB) else { return }
+        isUpdatingCacheLimit = true
+        Task {
+            await ImageDiskCache.shared.updateLimit(megabytes: Int(cacheLimitMB))
+            let usageBytes = await ImageDiskCache.shared.currentUsageBytes()
+            await MainActor.run {
+                appliedCacheLimitMB = cacheLimitMB
+                cacheUsageMB = bytesToMB(usageBytes)
+                isUpdatingCacheLimit = false
+                status = .success("Лимит кеша обновлён")
+            }
+        }
+    }
+
+    private func clearCacheStorage() {
+        isClearingCache = true
+        Task {
+            await ImageDiskCache.shared.clear()
+            await MainActor.run {
+                cacheUsageMB = 0
+                isClearingCache = false
+                status = .success("Кеш изображений очищен")
+            }
+        }
+    }
+
+    private func bytesToMB(_ bytes: Int) -> Double {
+        Double(bytes) / 1_048_576.0
+    }
+
+    private func formattedMB(_ value: Double) -> String {
+        String(format: "%.1f", value)
     }
 }

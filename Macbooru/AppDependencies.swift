@@ -67,7 +67,7 @@ private struct PreviewVotePostUseCase: VotePostUseCase {
 }
 
 private struct PreviewCommentsUseCase: CommentsUseCase {
-    func load(postID: Int, limit: Int) async throws -> [Comment] { [] }
+    func load(postID: Int, page: Int, limit: Int) async throws -> [Comment] { [] }
     func create(postID: Int, body: String) async throws -> Comment {
         Comment(id: .random(in: 1...9999), postID: postID, creatorID: nil, creatorName: "Preview", body: body, createdAt: .now)
     }

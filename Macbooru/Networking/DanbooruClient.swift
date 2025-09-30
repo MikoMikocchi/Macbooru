@@ -208,18 +208,21 @@ final class DanbooruClient {
         }
     }
 
-    func fetchComments(postID: Int, limit: Int = 40) async throws -> [Comment] {
+    func fetchComments(postID: Int, page: Int = 1, limit: Int = 40) async throws -> [Comment] {
         var comps = URLComponents(
             url: config.baseURL.appendingPathComponent("/comments.json"), resolvingAgainstBaseURL: false
         )!
         comps.queryItems = [
             URLQueryItem(name: "search[post_id]", value: String(postID)),
-            URLQueryItem(name: "limit", value: String(limit))
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "page", value: String(page))
         ]
         var req = URLRequest(url: comps.url!)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
-        logger.debug("GET /comments post=\(postID, privacy: .public)")
+        logger.debug(
+            "GET /comments post=\(postID, privacy: .public) page=\(page, privacy: .public) limit=\(limit, privacy: .public)"
+        )
         let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else {

@@ -24,6 +24,10 @@ actor ImageDiskCache {
 
     private let directory: URL
     private let fileManager: FileManager
+    private var maxSizeBytes: Int
+    private let defaults = UserDefaults.standard
+    private let limitKey = "imageCache.maxSizeBytes"
+    private let defaultLimitBytes = 256 * 1024 * 1024
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -37,6 +41,8 @@ actor ImageDiskCache {
         if !fileManager.fileExists(atPath: dir.path) {
             try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         }
+        let storedLimit = defaults.integer(forKey: limitKey)
+        maxSizeBytes = storedLimit > 0 ? storedLimit : defaultLimitBytes
     }
 
     func data(for url: URL) -> Data? {
@@ -51,11 +57,77 @@ actor ImageDiskCache {
         } catch {
             Logger.caching.warning("Failed to write image cache: \(error.localizedDescription)")
         }
+        enforceLimitIfNeeded()
     }
 
     private func filename(for url: URL) -> String {
         let hash = SHA256.hash(data: Data(url.absoluteString.utf8))
         return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+
+    func currentUsageBytes() -> Int {
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: .skipsHiddenFiles
+        ) else { return 0 }
+        return files.reduce(0) { partial, url in
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+            let size = values?.fileSize ?? 0
+            return partial + size
+        }
+    }
+
+    func limitInMegabytes() -> Int {
+        max(1, maxSizeBytes / 1_048_576)
+    }
+
+    func updateLimit(megabytes: Int) {
+        maxSizeBytes = max(1, megabytes) * 1_048_576
+        defaults.set(maxSizeBytes, forKey: limitKey)
+        enforceLimitIfNeeded()
+    }
+
+    func clear() {
+        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: []) else {
+            return
+        }
+        for url in files {
+            try? fileManager.removeItem(at: url)
+        }
+    }
+
+    private func enforceLimitIfNeeded() {
+        guard maxSizeBytes > 0 else { return }
+        guard var files = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+            options: .skipsHiddenFiles
+        ) else { return }
+
+        var totalSize = files.reduce(0) { partial, url in
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+            let size = values?.fileSize ?? 0
+            return partial + size
+        }
+
+        guard totalSize > maxSizeBytes else { return }
+
+        files.sort { lhs, rhs in
+            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+                ?? Date.distantPast
+            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+                ?? Date.distantPast
+            return lhsDate < rhsDate
+        }
+
+        for url in files {
+            guard totalSize > maxSizeBytes else { break }
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey])
+            let size = values?.fileSize ?? 0
+            try? fileManager.removeItem(at: url)
+            totalSize -= size
+        }
     }
 }
 

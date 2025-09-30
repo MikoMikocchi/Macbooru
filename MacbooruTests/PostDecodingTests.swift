@@ -16,7 +16,10 @@ final class PostDecodingTests: XCTestCase {
           "height": 768,
           "score": 42,
           "fav_count": 3,
-          "source": "https://artist.example/post/1"
+          "source": "https://artist.example/post/1",
+          "is_favorited": true,
+          "up_score": 123,
+          "down_score": 5
         }]
         """.data(using: .utf8)!
 
@@ -27,5 +30,8 @@ final class PostDecodingTests: XCTestCase {
         XCTAssertEqual(posts.first?.id, 123)
         XCTAssertEqual(posts.first?.rating, "s")
         XCTAssertEqual(posts.first?.score, 42)
+        XCTAssertEqual(posts.first?.isFavorited, true)
+        XCTAssertEqual(posts.first?.upScore, 123)
+        XCTAssertEqual(posts.first?.downScore, 5)
     }
 }

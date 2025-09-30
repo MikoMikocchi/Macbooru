@@ -6,13 +6,13 @@ protocol PostsRepository {
     func favorite(postID: Int) async throws
     func unfavorite(postID: Int) async throws
     func vote(postID: Int, score: Int) async throws
-    func comments(for postID: Int, limit: Int) async throws -> [Comment]
+    func comments(for postID: Int, page: Int, limit: Int) async throws -> [Comment]
     func createComment(postID: Int, body: String) async throws -> Comment
 }
 
 extension PostsRepository {
-    func comments(for postID: Int) async throws -> [Comment] {
-        try await comments(for: postID, limit: 40)
+    func comments(for postID: Int, limit: Int = 40) async throws -> [Comment] {
+        try await comments(for: postID, page: 1, limit: limit)
     }
 }
 
@@ -41,8 +41,8 @@ final class PostsRepositoryImpl: PostsRepository {
         try await client.vote(postID: postID, score: score)
     }
 
-    func comments(for postID: Int, limit: Int) async throws -> [Comment] {
-        try await client.fetchComments(postID: postID, limit: limit)
+    func comments(for postID: Int, page: Int, limit: Int) async throws -> [Comment] {
+        try await client.fetchComments(postID: postID, page: page, limit: limit)
     }
 
     func createComment(postID: Int, body: String) async throws -> Comment {

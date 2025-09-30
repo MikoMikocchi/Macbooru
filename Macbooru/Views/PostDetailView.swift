@@ -26,6 +26,17 @@ struct PostDetailView: View {
     @State private var newComment: String = ""
     @State private var isSubmittingComment = false
     @State private var isInteractionInProgress = false
+    @State private var isFavorited: Bool? = nil
+    @State private var favoriteCount: Int? = nil
+    @State private var upScore: Int? = nil
+    @State private var downScore: Int? = nil
+    @State private var lastVoteScore: Int? = nil
+    @State private var didSyncInitialState = false
+    @State private var commentsPage: Int = 1
+    @State private var hasMoreComments: Bool = true
+    @State private var isLoadingMoreComments: Bool = false
+
+    private let commentsPageSize = 40
 
     private var bestImageCandidates: [URL] {
         [post.largeURL, post.fileURL, post.previewURL].compactMap { $0 }
@@ -231,27 +242,47 @@ struct PostDetailView: View {
                         .menuStyle(.borderlessButton)
 
                         Menu {
-                            Button("Favorite", systemImage: "heart") {
-                                Task { await performFavorite(add: true) }
+                            Button {
+                                Task { await performFavorite(add: !currentFavoriteState) }
+                            } label: {
+                                Label(
+                                    currentFavoriteState ? "Убрать из избранного" : "В избранное",
+                                    systemImage: currentFavoriteState ? "heart.slash" : "heart"
+                                )
                             }
-                            Button("Unfavorite", systemImage: "heart.slash") {
-                                Task { await performFavorite(add: false) }
-                            }
+                            .disabled(isInteractionInProgress || !dependenciesStore.hasCredentials)
+
                             Divider()
-                            Button("Vote +1", systemImage: "hand.thumbsup") {
+
+                            Button {
                                 Task { await performVote(score: 1) }
+                            } label: {
+                                Label("Vote +1", systemImage: "hand.thumbsup")
                             }
-                            Button("Vote -1", systemImage: "hand.thumbsdown") {
+                            .disabled(
+                                isInteractionInProgress
+                                    || !dependenciesStore.hasCredentials
+                                    || lastVoteScore == 1
+                            )
+
+                            Button {
                                 Task { await performVote(score: -1) }
+                            } label: {
+                                Label("Vote -1", systemImage: "hand.thumbsdown")
                             }
+                            .disabled(
+                                isInteractionInProgress
+                                    || !dependenciesStore.hasCredentials
+                                    || lastVoteScore == -1
+                            )
                         } label: {
                             Label("Interact", systemImage: "hand.tap")
                         }
                         .menuStyle(.borderlessButton)
-                        .disabled(isInteractionInProgress || !dependenciesStore.hasCredentials)
+                        .disabled(!dependenciesStore.hasCredentials)
                         .help(
                             dependenciesStore.hasCredentials
-                                ? "Favorite/Vote actions"
+                                ? "Избранное и голосование"
                                 : "Укажите учетные данные Danbooru в настройках"
                         )
 
@@ -318,10 +349,28 @@ struct PostDetailView: View {
                                     Text("\(score)")
                                 }
                             }
-                            if let fav = post.favCount {
+                            if let fav = favoriteCount ?? post.favCount {
                                 HStack {
                                     Text("Favs:")
                                     Text("\(fav)")
+                                }
+                            }
+                            if let isFav = isFavorited {
+                                HStack {
+                                    Text("Favorited:")
+                                    Text(isFav ? "Yes" : "No")
+                                }
+                            }
+                            if let up = upScore ?? post.upScore {
+                                HStack {
+                                    Text("Up votes:")
+                                    Text("\(up)")
+                                }
+                            }
+                            if let down = downScore ?? post.downScore {
+                                HStack {
+                                    Text("Down votes:")
+                                    Text("\(down)")
                                 }
                             }
                             if let date = post.createdAt {
@@ -424,6 +473,18 @@ struct PostDetailView: View {
 
                     GroupBox("Comments") {
                         VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Комментарии")
+                                    .font(.subheadline.weight(.semibold))
+                                Spacer()
+                                Button {
+                                    Task { await refreshComments() }
+                                } label: {
+                                    Label("Обновить", systemImage: "arrow.clockwise")
+                                }
+                                .disabled(isLoadingComments)
+                            }
+
                             if isLoadingComments {
                                 HStack(spacing: 8) {
                                     ProgressView()
@@ -447,6 +508,23 @@ struct PostDetailView: View {
                                         CommentRow(comment: comment)
                                         if comment.id != comments.last?.id { Divider() }
                                     }
+                                }
+                            }
+
+                            if hasMoreComments {
+                                if isLoadingMoreComments {
+                                    HStack {
+                                        Spacer()
+                                        ProgressView()
+                                        Spacer()
+                                    }
+                                } else {
+                                    Button {
+                                        Task { await loadMoreComments() }
+                                    } label: {
+                                        Label("Загрузить ещё", systemImage: "chevron.down")
+                                    }
+                                    .frame(maxWidth: .infinity)
                                 }
                             }
 
@@ -539,20 +617,21 @@ struct PostDetailView: View {
         .task(id: post.id) {
             await refreshComments()
         }
+        .onAppear {
+            if !didSyncInitialState {
+                syncPostState()
+                didSyncInitialState = true
+            }
+        }
     }
 
     @MainActor
     private func refreshComments() async {
         guard !isLoadingComments else { return }
-        isLoadingComments = true
-        commentsError = nil
-        do {
-            let items = try await dependencies.comments.load(postID: post.id, limit: 80)
-            comments = items.sorted(by: commentOrder)
-        } catch {
-            commentsError = commentErrorMessage(for: error)
-        }
-        isLoadingComments = false
+        commentsPage = 1
+        hasMoreComments = true
+        comments.removeAll()
+        await loadComments(page: 1, replace: true)
     }
 
     @MainActor
@@ -572,6 +651,39 @@ struct PostDetailView: View {
             commentsError = commentErrorMessage(for: error)
         }
         isSubmittingComment = false
+    }
+
+    @MainActor
+    private func loadMoreComments() async {
+        guard hasMoreComments, !isLoadingMoreComments else { return }
+        let nextPage = commentsPage + 1
+        await loadComments(page: nextPage, replace: false)
+    }
+
+    @MainActor
+    private func loadComments(page: Int, replace: Bool) async {
+        if replace {
+            isLoadingComments = true
+        } else {
+            isLoadingMoreComments = true
+        }
+        commentsError = nil
+        do {
+            let items = try await dependencies.comments.load(
+                postID: post.id, page: page, limit: commentsPageSize)
+            if replace {
+                comments = items
+            } else {
+                comments.append(contentsOf: items)
+            }
+            comments.sort(by: commentOrder)
+            commentsPage = page
+            hasMoreComments = items.count == commentsPageSize
+        } catch {
+            commentsError = commentErrorMessage(for: error)
+        }
+        isLoadingComments = false
+        isLoadingMoreComments = false
     }
 
     private func commentOrder(_ lhs: Comment, _ rhs: Comment) -> Bool {
@@ -611,9 +723,11 @@ struct PostDetailView: View {
         do {
             if add {
                 try await dependencies.favoritePost.favorite(postID: post.id)
+                updateFavoriteState(isFavorited: true)
                 withAnimation { saveMessage = "Добавлено в избранное" }
             } else {
                 try await dependencies.favoritePost.unfavorite(postID: post.id)
+                updateFavoriteState(isFavorited: false)
                 withAnimation { saveMessage = "Удалено из избранного" }
             }
         } catch {
@@ -633,10 +747,45 @@ struct PostDetailView: View {
         do {
             try await dependencies.votePost.vote(postID: post.id, score: score)
             let message = score >= 0 ? "Оценка +1 отправлена" : "Оценка -1 отправлена"
+            updateVoteState(score: score)
+            lastVoteScore = score
             withAnimation { saveMessage = message }
         } catch {
             withAnimation { saveMessage = commentErrorMessage(for: error) }
         }
+    }
+
+    private func syncPostState() {
+        isFavorited = post.isFavorited
+        favoriteCount = post.favCount
+        upScore = post.upScore
+        downScore = post.downScore
+    }
+
+    private func updateFavoriteState(isFavorited newValue: Bool) {
+        let previous = isFavorited ?? post.isFavorited ?? false
+        isFavorited = newValue
+        var base = favoriteCount ?? post.favCount ?? 0
+        if newValue && !previous {
+            base += 1
+        } else if !newValue && previous {
+            base = max(0, base - 1)
+        }
+        favoriteCount = base
+    }
+
+    private func updateVoteState(score: Int) {
+        if score >= 0 {
+            let current = upScore ?? post.upScore ?? 0
+            upScore = current + score
+        } else {
+            let current = downScore ?? post.downScore ?? 0
+            downScore = current + abs(score)
+        }
+    }
+
+    private var currentFavoriteState: Bool {
+        isFavorited ?? post.isFavorited ?? false
     }
 
     private func resetZoom() {
@@ -1256,26 +1405,69 @@ private struct CommentRow: View {
     let comment: Comment
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(authorName)
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                if let date = comment.createdAt {
-                    Text(date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 12) {
+            Circle()
+                .fill(.thinMaterial)
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Text(avatarInitial)
+                        .font(.headline.weight(.semibold))
+                )
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(authorName)
+                        .font(.subheadline.weight(.semibold))
+                    if let creatorID = comment.creatorID {
+                        Text("#\(creatorID)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if let date = comment.createdAt {
+                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if let attributed = renderedBody {
+                    Text(attributed)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    Text(comment.body)
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Text(comment.body)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var authorName: String {
         if let name = comment.creatorName, !name.isEmpty { return name }
         return "Anonymous"
+    }
+
+    private var avatarInitial: String {
+        String(authorName.prefix(1)).uppercased()
+    }
+
+    private var renderedBody: AttributedString? {
+        guard !comment.body.isEmpty else { return nil }
+        let markdown = sanitizeBBCode(comment.body)
+        return try? AttributedString(
+            markdown: markdown,
+            options: AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )
+    }
+
+    private func sanitizeBBCode(_ text: String) -> String {
+        var output = text
+        output = output.replacingOccurrences(of: "[spoiler]", with: "||")
+        output = output.replacingOccurrences(of: "[/spoiler]", with: "||")
+        output = output.replacingOccurrences(of: "[quote]", with: "> ")
+        output = output.replacingOccurrences(of: "[/quote]", with: "\n")
+        return output
     }
 }
 

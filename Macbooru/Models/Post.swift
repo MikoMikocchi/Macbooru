@@ -19,6 +19,9 @@ struct Post: Identifiable, Codable, Hashable {
     let score: Int?
     let favCount: Int?
     let source: String?
+    let isFavorited: Bool?
+    let upScore: Int?
+    let downScore: Int?
 
     // Удобные URL, автоматически дополняющие относительные пути хостом Danbooru
     var fileURL: URL? { URL.makeDanbooruURL(fileUrl) }
@@ -50,6 +53,9 @@ struct Post: Identifiable, Codable, Hashable {
         case score
         case favCount = "fav_count"
         case source
+        case isFavorited = "is_favorited"
+        case upScore = "up_score"
+        case downScore = "down_score"
     }
 
     private static func split(_ s: String?) -> [String] {

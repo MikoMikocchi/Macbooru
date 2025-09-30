@@ -9,11 +9,15 @@ final class AppDependenciesStore: ObservableObject {
 
     private let persistence: CredentialsPersisting
 
-    init(persistence: CredentialsPersisting = KeychainCredentialsStore()) {
+    init(persistence: CredentialsPersisting) {
         self.persistence = persistence
         let stored = persistence.load().sanitized
         self.credentials = stored
         self.dependencies = AppDependencies.makeDefault(config: stored.asConfig())
+    }
+
+    convenience init() {
+        self.init(persistence: KeychainCredentialsStore())
     }
 
     func updateCredentials(username: String?, apiKey: String?) throws {

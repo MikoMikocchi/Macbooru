@@ -70,6 +70,14 @@ struct PostTileView: View {
         .fixedSize(horizontal: false, vertical: true)
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .onHover { hover = $0 }
+        .overlay(alignment: .topTrailing) {
+            if post.isFavorited == true {
+                Image(systemName: "heart.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.pink, .white)
+                    .padding(8)
+            }
+        }
         .contextMenu {
             if let url = post.fileURL { Link("Open original in Browser", destination: url) }
             if let url = post.largeURL { Link("Open large in Browser", destination: url) }

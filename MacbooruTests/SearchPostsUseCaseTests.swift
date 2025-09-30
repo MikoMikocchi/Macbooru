@@ -83,6 +83,7 @@ final class CommentsUseCaseTests: XCTestCase {
         let comments = try await useCase.load(postID: 90, limit: 10)
 
         XCTAssertEqual(repo.lastCommentsParameters?.postID, 90)
+        XCTAssertEqual(repo.lastCommentsParameters?.page, 1)
         XCTAssertEqual(repo.lastCommentsParameters?.limit, 10)
         XCTAssertEqual(comments.map(\.id), [1, 2])
     }
@@ -98,6 +99,17 @@ final class CommentsUseCaseTests: XCTestCase {
         XCTAssertEqual(repo.lastCreateParameters?.body, "Hello")
         XCTAssertEqual(comment.id, 5)
     }
+
+    func testLoadWithSecondPage() async throws {
+        let repo = MockPostsRepository()
+        repo.commentsResult = [.fixture(id: 3, body: "Later")]
+        let useCase = DefaultCommentsUseCase(postsRepository: repo)
+
+        _ = try await useCase.load(postID: 12, page: 2, limit: 20)
+
+        XCTAssertEqual(repo.lastCommentsParameters?.page, 2)
+        XCTAssertEqual(repo.lastCommentsParameters?.limit, 20)
+    }
 }
 
 private final class MockPostsRepository: PostsRepository {
@@ -108,7 +120,7 @@ private final class MockPostsRepository: PostsRepository {
 
     private(set) var lastRecentParameters: (page: Int, limit: Int)?
     private(set) var lastByTagsParameters: (query: String, page: Int, limit: Int)?
-    private(set) var lastCommentsParameters: (postID: Int, limit: Int)?
+    private(set) var lastCommentsParameters: (postID: Int, page: Int, limit: Int)?
     private(set) var lastCreateParameters: (postID: Int, body: String)?
     private(set) var favoriteCalls: [Int] = []
     private(set) var unfavoriteCalls: [Int] = []
@@ -136,8 +148,8 @@ private final class MockPostsRepository: PostsRepository {
         voteCalls.append((postID, score))
     }
 
-    func comments(for postID: Int, limit: Int) async throws -> [Comment] {
-        lastCommentsParameters = (postID, limit)
+    func comments(for postID: Int, page: Int, limit: Int) async throws -> [Comment] {
+        lastCommentsParameters = (postID, page, limit)
         return commentsResult
     }
 
@@ -166,7 +178,10 @@ private extension Post {
             height: nil,
             score: nil,
             favCount: nil,
-            source: nil
+            source: nil,
+            isFavorited: nil,
+            upScore: nil,
+            downScore: nil
         )
     }
 }
