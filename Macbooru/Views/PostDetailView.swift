@@ -11,6 +11,7 @@ struct PostDetailView: View {
     let post: Post
     @EnvironmentObject private var search: SearchState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.appDependencies) private var dependencies
 
     // Зум и панорамирование
     @State private var zoom: CGFloat = 1.0
@@ -18,6 +19,11 @@ struct PostDetailView: View {
     @State private var offset: CGSize = .zero
     @State private var lastDrag: CGSize = .zero
     @State private var saveMessage: String? = nil
+    @State private var comments: [Comment] = []
+    @State private var isLoadingComments = false
+    @State private var commentsError: String? = nil
+    @State private var newComment: String = ""
+    @State private var isSubmittingComment = false
 
     private var bestImageCandidates: [URL] {
         [post.largeURL, post.fileURL, post.previewURL].compactMap { $0 }
@@ -388,6 +394,76 @@ struct PostDetailView: View {
                             RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
                                 .quinary, lineWidth: 1))
                     }
+
+                    GroupBox("Comments") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if isLoadingComments {
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                    Text("Loading comments…").foregroundStyle(.secondary)
+                                }
+                            } else if let error = commentsError {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(error).foregroundStyle(.secondary)
+                                    Button {
+                                        Task { await refreshComments() }
+                                    } label: {
+                                        Label("Retry", systemImage: "arrow.clockwise")
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                }
+                            } else if comments.isEmpty {
+                                Text("No comments yet").foregroundStyle(.secondary)
+                            } else {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(comments) { comment in
+                                        CommentRow(comment: comment)
+                                        if comment.id != comments.last?.id { Divider() }
+                                    }
+                                }
+                            }
+
+                            Divider().padding(.vertical, 4)
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Add Comment").font(.subheadline.weight(.semibold))
+                                TextEditor(text: $newComment)
+                                    .frame(minHeight: 80)
+                                    .scrollContentBackground(.hidden)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .strokeBorder(.quinary, lineWidth: 1)
+                                    )
+                                HStack {
+                                    Spacer()
+                                    Button {
+                                        Task { await submitComment() }
+                                    } label: {
+                                        if isSubmittingComment {
+                                            ProgressView().progressViewStyle(.circular)
+                                        } else {
+                                            Label("Post", systemImage: "paperplane")
+                                        }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(isSubmittingComment || newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                                Text("Requires Danbooru credentials in settings.")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(8)
+                    .background(
+                        .regularMaterial,
+                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(.quinary, lineWidth: 1)
+                    )
                 }
                 .padding(.vertical)
                 .frame(maxWidth: 320)
@@ -433,6 +509,67 @@ struct PostDetailView: View {
                     }
             }
         }
+        .task(id: post.id) {
+            await refreshComments()
+        }
+    }
+
+    @MainActor
+    private func refreshComments() async {
+        guard !isLoadingComments else { return }
+        isLoadingComments = true
+        commentsError = nil
+        do {
+            let items = try await dependencies.comments.load(postID: post.id, limit: 80)
+            comments = items.sorted(by: commentOrder)
+        } catch {
+            commentsError = commentErrorMessage(for: error)
+        }
+        isLoadingComments = false
+    }
+
+    @MainActor
+    private func submitComment() async {
+        let trimmed = newComment.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard !isSubmittingComment else { return }
+        isSubmittingComment = true
+        commentsError = nil
+        do {
+            let comment = try await dependencies.comments.create(postID: post.id, body: trimmed)
+            newComment = ""
+            comments.append(comment)
+            comments.sort(by: commentOrder)
+            saveMessage = "Comment posted"
+        } catch {
+            commentsError = commentErrorMessage(for: error)
+        }
+        isSubmittingComment = false
+    }
+
+    private func commentOrder(_ lhs: Comment, _ rhs: Comment) -> Bool {
+        let lhsDate = lhs.createdAt ?? .distantPast
+        let rhsDate = rhs.createdAt ?? .distantPast
+        return lhsDate < rhsDate
+    }
+
+    private func commentErrorMessage(for error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .missingCredentials:
+                return "Authenticate with Danbooru (API key + username) to use this action."
+            case .serverError(let code):
+                return "Server error (status \(code)). Try again later."
+            case .decoding(let underlying):
+                return "Failed to parse server response: \(underlying.localizedDescription)"
+            case .invalidResponse:
+                return "Invalid server response."
+            }
+        }
+        if let urlError = error as? URLError {
+            return "Network error: \(urlError.localizedDescription)"
+        }
+        return error.localizedDescription
     }
 
     private func resetZoom() {
@@ -1044,6 +1181,34 @@ private struct FlowLayout: Layout {
             x += size.width + spacing
             lineHeight = max(lineHeight, size.height)
         }
+    }
+}
+
+// MARK: - Комментарии
+private struct CommentRow: View {
+    let comment: Comment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(authorName)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if let date = comment.createdAt {
+                    Text(date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(comment.body)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var authorName: String {
+        if let name = comment.creatorName, !name.isEmpty { return name }
+        return "Anonymous"
     }
 }
 

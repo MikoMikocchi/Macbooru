@@ -41,12 +41,78 @@ final class SearchPostsUseCaseTests: XCTestCase {
     }
 }
 
+final class FavoritePostUseCaseTests: XCTestCase {
+    func testFavoriteInvokesRepository() async throws {
+        let repo = MockPostsRepository()
+        let useCase = DefaultFavoritePostUseCase(postsRepository: repo)
+
+        try await useCase.favorite(postID: 42)
+
+        XCTAssertEqual(repo.favoriteCalls, [42])
+    }
+
+    func testUnfavoriteInvokesRepository() async throws {
+        let repo = MockPostsRepository()
+        let useCase = DefaultFavoritePostUseCase(postsRepository: repo)
+
+        try await useCase.unfavorite(postID: 55)
+
+        XCTAssertEqual(repo.unfavoriteCalls, [55])
+    }
+}
+
+final class VotePostUseCaseTests: XCTestCase {
+    func testVoteInvokesRepository() async throws {
+        let repo = MockPostsRepository()
+        let useCase = DefaultVotePostUseCase(postsRepository: repo)
+
+        try await useCase.vote(postID: 77, score: 3)
+
+        XCTAssertEqual(repo.voteCalls.count, 1)
+        XCTAssertEqual(repo.voteCalls.first?.postID, 77)
+        XCTAssertEqual(repo.voteCalls.first?.score, 3)
+    }
+}
+
+final class CommentsUseCaseTests: XCTestCase {
+    func testLoadReturnsRepositoryData() async throws {
+        let repo = MockPostsRepository()
+        repo.commentsResult = [.fixture(id: 1, body: "Hi"), .fixture(id: 2, body: "Hello")]
+        let useCase = DefaultCommentsUseCase(postsRepository: repo)
+
+        let comments = try await useCase.load(postID: 90, limit: 10)
+
+        XCTAssertEqual(repo.lastCommentsParameters?.postID, 90)
+        XCTAssertEqual(repo.lastCommentsParameters?.limit, 10)
+        XCTAssertEqual(comments.map(\.id), [1, 2])
+    }
+
+    func testCreateReturnsCreatedComment() async throws {
+        let repo = MockPostsRepository()
+        repo.createCommentResult = .fixture(id: 5, body: "New")
+        let useCase = DefaultCommentsUseCase(postsRepository: repo)
+
+        let comment = try await useCase.create(postID: 11, body: "Hello")
+
+        XCTAssertEqual(repo.lastCreateParameters?.postID, 11)
+        XCTAssertEqual(repo.lastCreateParameters?.body, "Hello")
+        XCTAssertEqual(comment.id, 5)
+    }
+}
+
 private final class MockPostsRepository: PostsRepository {
     var recentResult: [Post] = []
     var byTagsResult: [Post] = []
+    var commentsResult: [Comment] = []
+    var createCommentResult: Comment = .fixture(id: 1, body: "")
 
     private(set) var lastRecentParameters: (page: Int, limit: Int)?
     private(set) var lastByTagsParameters: (query: String, page: Int, limit: Int)?
+    private(set) var lastCommentsParameters: (postID: Int, limit: Int)?
+    private(set) var lastCreateParameters: (postID: Int, body: String)?
+    private(set) var favoriteCalls: [Int] = []
+    private(set) var unfavoriteCalls: [Int] = []
+    private(set) var voteCalls: [(postID: Int, score: Int)] = []
 
     func recent(page: Int, limit: Int) async throws -> [Post] {
         lastRecentParameters = (page, limit)
@@ -58,16 +124,26 @@ private final class MockPostsRepository: PostsRepository {
         return byTagsResult
     }
 
-    func favorite(postID: Int) async throws {}
+    func favorite(postID: Int) async throws {
+        favoriteCalls.append(postID)
+    }
 
-    func unfavorite(postID: Int) async throws {}
+    func unfavorite(postID: Int) async throws {
+        unfavoriteCalls.append(postID)
+    }
 
-    func vote(postID: Int, score: Int) async throws {}
+    func vote(postID: Int, score: Int) async throws {
+        voteCalls.append((postID, score))
+    }
 
-    func comments(for postID: Int, limit: Int) async throws -> [Comment] { [] }
+    func comments(for postID: Int, limit: Int) async throws -> [Comment] {
+        lastCommentsParameters = (postID, limit)
+        return commentsResult
+    }
 
     func createComment(postID: Int, body: String) async throws -> Comment {
-        Comment(id: 1, postID: postID, creatorID: nil, creatorName: nil, body: body, createdAt: nil)
+        lastCreateParameters = (postID, body)
+        return createCommentResult
     }
 }
 
@@ -91,6 +167,19 @@ private extension Post {
             score: nil,
             favCount: nil,
             source: nil
+        )
+    }
+}
+
+private extension Comment {
+    static func fixture(id: Int, postID: Int = 1, body: String) -> Comment {
+        Comment(
+            id: id,
+            postID: postID,
+            creatorID: nil,
+            creatorName: "Tester",
+            body: body,
+            createdAt: Date(timeIntervalSince1970: TimeInterval(id))
         )
     }
 }
