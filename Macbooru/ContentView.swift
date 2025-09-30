@@ -40,19 +40,22 @@ struct PostGridView: View {
         .onChange(of: search.tileSize) { _ in recomputeColumns() }
         .onChange(of: search.searchTrigger) { _ in Task { await refresh() } }
         .onAppear { recomputeColumns() }
-        .focusedSceneValue(\.gridActions, GridActions(
-            prev: {
-                guard !isLoading, search.page > 1 else { return }
-                Task { await load(page: max(1, search.page - 1), replace: true) }
-            },
-            next: {
-                guard !isLoading else { return }
-                Task { await load(page: search.page + 1, replace: true) }
-            },
-            refresh: {
-                Task { await refresh() }
-            }
-        ))
+        .focusedSceneValue(
+            \.gridActions,
+            GridActions(
+                prev: {
+                    guard !isLoading, search.page > 1 else { return }
+                    Task { await load(page: max(1, search.page - 1), replace: true) }
+                },
+                next: {
+                    guard !isLoading else { return }
+                    Task { await load(page: search.page + 1, replace: true) }
+                },
+                refresh: {
+                    Task { await refresh() }
+                }
+            )
+        )
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -186,4 +189,3 @@ struct ContentView: View {
         // Ничего не делаем здесь, так как PostGridView сам вызывает .task { load(page:1) }
     }
 }
-

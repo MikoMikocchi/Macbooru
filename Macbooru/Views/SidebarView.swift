@@ -65,31 +65,34 @@ struct SidebarView: View {
                         .buttonStyle(.borderless)
                     }
                     // Делаем команды доступными через focusedSceneValue
-                    .focusedSceneValue(\.searchActions, SearchActions(
-                        focusSearch: {
-                            #if os(macOS)
-                                isSearchFocused = true
-                            #endif
-                        },
-                        setPageSize15: {
-                            guard state.pageSize != 15 else { return }
-                            state.pageSize = 15
-                            state.resetForNewSearch()
-                            onSearch?()
-                        },
-                        setPageSize30: {
-                            guard state.pageSize != 30 else { return }
-                            state.pageSize = 30
-                            state.resetForNewSearch()
-                            onSearch?()
-                        },
-                        setPageSize60: {
-                            guard state.pageSize != 60 else { return }
-                            state.pageSize = 60
-                            state.resetForNewSearch()
-                            onSearch?()
-                        }
-                    ))
+                    .focusedSceneValue(
+                        \.searchActions,
+                        SearchActions(
+                            focusSearch: {
+                                #if os(macOS)
+                                    isSearchFocused = true
+                                #endif
+                            },
+                            setPageSize15: {
+                                guard state.pageSize != 15 else { return }
+                                state.pageSize = 15
+                                state.resetForNewSearch()
+                                onSearch?()
+                            },
+                            setPageSize30: {
+                                guard state.pageSize != 30 else { return }
+                                state.pageSize = 30
+                                state.resetForNewSearch()
+                                onSearch?()
+                            },
+                            setPageSize60: {
+                                guard state.pageSize != 60 else { return }
+                                state.pageSize = 60
+                                state.resetForNewSearch()
+                                onSearch?()
+                            }
+                        )
+                    )
 
                     .onChange(of: state.tags) { _, newValue in
                         scheduleAutocomplete(for: newValue)
@@ -398,31 +401,33 @@ struct SidebarView: View {
             refreshSaved()
             refreshRecent()
         }
-        .focusedSceneValue(\.searchActions, SearchActions(
-            focusSearch: {
-                #if os(macOS)
-                    isSearchFocused = true
-                #endif
-            },
-            setPageSize15: {
-                guard state.pageSize != 15 else { return }
-                state.pageSize = 15
-                state.resetForNewSearch()
-                onSearch?()
-            },
-            setPageSize30: {
-                guard state.pageSize != 30 else { return }
-                state.pageSize = 30
-                state.resetForNewSearch()
-                onSearch?()
-            },
-            setPageSize60: {
-                guard state.pageSize != 60 else { return }
-                state.pageSize = 60
-                state.resetForNewSearch()
-                onSearch?()
-            }
-        ))
+        .focusedSceneValue(
+            \.searchActions,
+            SearchActions(
+                focusSearch: {
+                    #if os(macOS)
+                        isSearchFocused = true
+                    #endif
+                },
+                setPageSize15: {
+                    guard state.pageSize != 15 else { return }
+                    state.pageSize = 15
+                    state.resetForNewSearch()
+                    onSearch?()
+                },
+                setPageSize30: {
+                    guard state.pageSize != 30 else { return }
+                    state.pageSize = 30
+                    state.resetForNewSearch()
+                    onSearch?()
+                },
+                setPageSize60: {
+                    guard state.pageSize != 60 else { return }
+                    state.pageSize = 60
+                    state.resetForNewSearch()
+                    onSearch?()
+                }
+            ))
     }
 }
 
