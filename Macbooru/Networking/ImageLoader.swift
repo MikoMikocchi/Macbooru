@@ -55,8 +55,10 @@ final class ThrottledImageLoader {
                     throw URLError(.badServerResponse)
                 }
                 let ctype = http.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
-                // Диагностика: какой формат реально приходит
-                print("Image content-type=\(ctype) url=\(url.lastPathComponent)")
+                // Диагностика: какой формат реально приходит (только в DEBUG)
+                #if DEBUG
+                    print("Image content-type=\(ctype) url=\(url.lastPathComponent)")
+                #endif
                 #if os(macOS)
                     // Надежное декодирование через NSBitmapImageRep -> NSImage с валидным size
                     let img: NSImage? = await MainActor.run {
@@ -91,9 +93,11 @@ final class ThrottledImageLoader {
                         return nil
                     }
                     guard let img else { throw URLError(.cannotDecodeContentData) }
-                    print(
-                        "Decoded image size: \(Int(img.size.width))x\(Int(img.size.height)) for \(url.lastPathComponent)"
-                    )
+                    #if DEBUG
+                        print(
+                            "Decoded image size: \(Int(img.size.width))x\(Int(img.size.height)) for \(url.lastPathComponent)"
+                        )
+                    #endif
                 #else
                     guard let img = UIImage(data: data, scale: UIScreen.main.scale) else {
                         throw URLError(.cannotDecodeContentData)
@@ -103,7 +107,9 @@ final class ThrottledImageLoader {
                 return img
             } catch {
                 lastError = error
-                print("Image load error: \(url.absoluteString) — \(error.localizedDescription)")
+                #if DEBUG
+                    print("Image load error: \(url.absoluteString) — \(error.localizedDescription)")
+                #endif
                 let delay = UInt64(pow(2.0, Double(attempt)) * 200_000_000)  // 0.2s, 0.4s, 0.8s
                 try? await Task.sleep(nanoseconds: delay)
             }
@@ -131,6 +137,8 @@ struct RemoteImage: View {
     let contentMode: ContentMode
     var animateFirstAppearance: Bool = true
     var animateUpgrades: Bool = false
+    var interpolation: Image.Interpolation = .high
+    var decoratedBackground: Bool = true
 
     @State private var image: PlatformImage? = nil
     @State private var pixelCount: Int = 0
@@ -144,12 +152,12 @@ struct RemoteImage: View {
                 #if os(macOS)
                     Image(nsImage: image)
                         .resizable()
-                        .interpolation(.high)
+                        .interpolation(interpolation)
                         .modifier(Scaled(contentMode: contentMode))
                 #else
                     Image(uiImage: image)
                         .resizable()
-                        .interpolation(.high)
+                        .interpolation(interpolation)
                         .modifier(Scaled(contentMode: contentMode))
                 #endif
             } else if isLoading {
@@ -171,8 +179,12 @@ struct RemoteImage: View {
         }
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.gray.opacity(0.2))
+            Group {
+                if decoratedBackground {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                }
+            }
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())

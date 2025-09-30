@@ -40,7 +40,10 @@ struct SidebarView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Search").font(.headline)
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass.circle.fill").foregroundStyle(.secondary)
+                        Text("Search").font(.headline).fontWeight(.semibold)
+                    }
                     HStack(alignment: .center, spacing: 8) {
                         TextField("Enter tags…", text: $state.tags)
                             .textFieldStyle(.roundedBorder)
@@ -62,7 +65,7 @@ struct SidebarView: View {
                         .buttonStyle(.borderless)
                     }
 
-                    .onChange(of: state.tags) { newValue in
+                    .onChange(of: state.tags) { _, newValue in
                         scheduleAutocomplete(for: newValue)
                     }
                     .onSubmit {
@@ -77,7 +80,7 @@ struct SidebarView: View {
                         onSearch?()
                     }
                     .focused($isSearchFocused)
-                    .onChange(of: isSearchFocused) { newFocused in
+                    .onChange(of: isSearchFocused) { _, newFocused in
                         if !newFocused { suggestions.removeAll() }
                     }
                     // Закрытие по Esc
@@ -163,8 +166,10 @@ struct SidebarView: View {
                     #endif
                     if !saved.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Saved").font(.subheadline).foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Image(systemName: "bookmark.fill").foregroundStyle(.secondary)
+                                Text("Saved").font(.subheadline).fontWeight(.semibold)
+                                    .foregroundStyle(.secondary)
                                 Spacer()
                                 Button {
                                     isSavedExpanded.toggle()
@@ -212,8 +217,10 @@ struct SidebarView: View {
                     // Recent searches
                     if !recent.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Recent").font(.subheadline).foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Image(systemName: "clock.fill").foregroundStyle(.secondary)
+                                Text("Recent").font(.subheadline).fontWeight(.semibold)
+                                    .foregroundStyle(.secondary)
                                 Spacer()
                                 Button {
                                     recentStore.clear()
@@ -243,10 +250,15 @@ struct SidebarView: View {
                     }
                     // Sort mode (wrap chips)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Sort").font(.subheadline).foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.up.arrow.down.circle.fill").foregroundStyle(
+                                .secondary)
+                            Text("Sort").font(.subheadline).fontWeight(.semibold).foregroundStyle(
+                                .secondary)
+                        }
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         ChipsFlowLayout(spacing: 8, rowSpacing: 8) {
                             ForEach(SortMode.allCases) { m in
                                 Button {
@@ -274,10 +286,14 @@ struct SidebarView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Rating").font(.subheadline).foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) {
+                            Image(systemName: "hand.raised.fill").foregroundStyle(.secondary)
+                            Text("Rating").font(.subheadline).fontWeight(.semibold).foregroundStyle(
+                                .secondary)
+                        }
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Picker("Rating", selection: $state.rating) {
                             ForEach(Rating.allCases) { r in Text(r.display).tag(r) }
                         }
@@ -286,10 +302,14 @@ struct SidebarView: View {
                         .labelsHidden()
                     }
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Tile size").font(.subheadline).foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) {
+                            Image(systemName: "square.grid.3x3.fill").foregroundStyle(.secondary)
+                            Text("Tile size").font(.subheadline).fontWeight(.semibold)
+                                .foregroundStyle(.secondary)
+                        }
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         Picker("Tile size", selection: $state.tileSize) {
                             ForEach(TileSize.allCases) { t in Text(t.title).tag(t) }
                         }
@@ -538,7 +558,7 @@ private struct SuggestList: View {
                         if idx < items.count - 1 { Divider() }
                     }
                 }
-                .onChange(of: selectedIndex) { newValue in
+                .onChange(of: selectedIndex) { _, newValue in
                     withAnimation(.easeInOut(duration: 0.12)) {
                         proxy.scrollTo(newValue, anchor: .center)
                     }

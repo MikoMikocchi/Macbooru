@@ -394,6 +394,17 @@ struct PostDetailView: View {
             }
         }
         .padding()
+        .background(
+            LinearGradient(
+                colors: [
+                    Color("PrimaryBackground"),
+                    Color("SecondaryBackground").opacity(0.96),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
         .navigationTitle("Post #\(post.id)")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {

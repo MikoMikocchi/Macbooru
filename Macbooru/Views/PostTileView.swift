@@ -9,6 +9,7 @@ struct PostTileView: View {
     let height: CGFloat
     @State private var hover = false
     @EnvironmentObject private var search: SearchState
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -17,15 +18,17 @@ struct PostTileView: View {
                 height: height,
                 contentMode: .fit,
                 animateFirstAppearance: true,
-                animateUpgrades: false
+                animateUpgrades: false,
+                interpolation: .medium,
+                decoratedBackground: false
             )
             // Усиленный блюр самого изображения для NSFW
             .blur(
                 radius: {
                     guard search.blurSensitive, let r = post.rating?.lowercased() else { return 0 }
                     switch r {
-                    case "e": return 16
-                    case "q": return 12
+                    case "e": return 10
+                    case "q": return 6
                     default: return 0
                     }
                 }()
@@ -41,26 +44,36 @@ struct PostTileView: View {
                     }
                 }
             )
-            if hover {
-                LinearGradient(
-                    gradient: Gradient(colors: [.black.opacity(0.0), .black.opacity(0.5)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .allowsHitTesting(false)
-                HStack(spacing: 8) {
-                    if let rating = post.rating { Badge(text: rating.uppercased()) }
-                    if let w = post.width, let h = post.height { Badge(text: "\(w)x\(h)") }
-                    if let score = post.score { Badge(text: "★ \(score)") }
-                }
-                .padding(8)
+            // Градиентный оверлей снизу для читаемости бейджей
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    .black.opacity(0.0), .black.opacity(hover ? 0.65 : 0.45),
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .allowsHitTesting(false)
+
+            // Инфо-строка
+            HStack(spacing: 8) {
+                if let r = post.rating { SolidRatingChip(rating: r) }
+                if let w = post.width, let h = post.height { SizeChip(width: w, height: h) }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .padding(.bottom, 6)
+            .opacity(hover ? 1 : 0.92)
         }
-        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-        .fixedSize(horizontal: false, vertical: true)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+        // Используются унифицированные компоненты RatingChip/ScoreChip/SizeChip из Theme.swift
+        .fixedSize(horizontal: false, vertical: true)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.05))
+        )
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .shadow(color: .black.opacity(hover ? 0.22 : 0.0), radius: hover ? 12 : 0, y: hover ? 4 : 0)
         .onHover { hover = $0 }
         .contextMenu {
             if let url = post.fileURL { Link("Open original in Browser", destination: url) }
@@ -88,72 +101,47 @@ struct PostTileView: View {
     }
 }
 
-private struct Badge: View {
-    let text: String
-    var body: some View {
-        Text(text)
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.ultraThinMaterial, in: Capsule())
-    }
-}
+// Используются единые компоненты RatingChip/ScoreChip/SizeChip из Theme.swift
 
-#if os(macOS)
-    private struct VisualBlurOverlay: View {
-        var body: some View {
-            ZStack {
-                VisualMaterialView(
-                    material: .hudWindow, blendingMode: .withinWindow, state: .active
-                )
-                .opacity(0.95)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                Color.black.opacity(0.25)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+private struct VisualBlurOverlay: View {
+    var body: some View {
+        Color.black.opacity(0.35)
+            .overlay(
                 Image(systemName: "eye.slash")
                     .font(.title3.weight(.semibold))
                     .padding(6)
                     .background(.thinMaterial, in: Capsule())
-            }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             .allowsHitTesting(false)
-        }
     }
-    // Local NSVisualEffectView wrapper for blur/material overlays
-    private struct VisualMaterialView: NSViewRepresentable {
-        var material: NSVisualEffectView.Material
-        var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
-        var state: NSVisualEffectView.State = .active
+}
 
-        func makeNSView(context: Context) -> NSVisualEffectView {
-            let v = NSVisualEffectView()
-            v.material = material
-            v.blendingMode = blendingMode
-            v.state = state
-            v.isEmphasized = true
-            v.translatesAutoresizingMaskIntoConstraints = false
-            return v
+// Более контрастный рейтинг-чип для плитки
+private struct SolidRatingChip: View {
+    let rating: String
+    var body: some View {
+        let r = rating.lowercased()
+        let (bg, icon): (Color, String) = {
+            switch r {
+            case "g": return (.green, "checkmark.seal.fill")
+            case "s": return (.blue, "hand.raised.fill")
+            case "q": return (.orange, "exclamationmark.triangle.fill")
+            default: return (.red, "nosign")
+            }
+        }()
+        HStack(spacing: 6) {
+            Image(systemName: icon).imageScale(.small)
+            Text(r.uppercased()).fontWeight(.semibold)
         }
-
-        func updateNSView(_ v: NSVisualEffectView, context: Context) {
-            v.material = material
-            v.blendingMode = blendingMode
-            v.state = state
-        }
+        .font(.caption)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(bg, in: Capsule())
+        .foregroundStyle(Color.white)
+        .shadow(color: bg.opacity(0.3), radius: 3, y: 1)
     }
-#else
-    private struct VisualBlurOverlay: View {
-        var body: some View {
-            Color.black.opacity(0.4)
-                .overlay(
-                    Image(systemName: "eye.slash")
-                        .font(.title3.weight(.semibold))
-                        .padding(6)
-                        .background(.thinMaterial, in: Capsule())
-                )
-                .allowsHitTesting(false)
-        }
-    }
-#endif
+}
 
 // MARK: - Clipboard helpers
 private func copyToClipboard(_ text: String) {

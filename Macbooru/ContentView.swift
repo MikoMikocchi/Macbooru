@@ -153,6 +153,17 @@ struct ContentView: View {
         }
         .environmentObject(search)
         .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color("PrimaryBackground"),
+                    Color("SecondaryBackground").opacity(0.95),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
     }
 
     @MainActor
