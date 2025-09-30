@@ -25,6 +25,40 @@ enum Rating: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+enum SortMode: String, CaseIterable, Identifiable, Codable {
+    case recent  // по умолчанию (без order)
+    case newest  // order:id_desc
+    case oldest  // order:id_asc
+    case rank  // order:rank (популярное/трендовое)
+    case score  // order:score
+    case favs  // order:favcount
+    case random  // order:random (может игнорировать другие фильтры)
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .recent: return "Recent"
+        case .newest: return "Newest"
+        case .oldest: return "Oldest"
+        case .rank: return "Rank"
+        case .score: return "Score"
+        case .favs: return "Favs"
+        case .random: return "Random"
+        }
+    }
+    var orderTag: String? {
+        switch self {
+        case .recent: return nil
+        case .newest: return "order:id_desc"
+        case .oldest: return "order:id_asc"
+        case .rank: return "order:rank"
+        case .score: return "order:score"
+        case .favs: return "order:favcount"
+        case .random: return "order:random"
+        }
+    }
+}
+
 enum TileSize: String, CaseIterable, Identifiable {
     case small, medium, large
     var id: String { rawValue }
@@ -49,17 +83,20 @@ final class SearchState: ObservableObject {
     @Published var tags: String = ""
     @Published var rating: Rating = .any
     @Published var tileSize: TileSize = .medium
+    @Published var sort: SortMode = .recent
     @Published var page: Int = 1
     @Published var searchTrigger: Int = 0
     @Published var blurSensitive: Bool = true
 
     // составной запрос для Danbooru: rating:*, затем пользовательские теги
     var danbooruQuery: String? {
-        let parts: [String] = [rating.tag, tags.trimmingCharacters(in: .whitespacesAndNewlines)]
-            .compactMap { s in
-                guard let s = s, !s.isEmpty else { return nil }
-                return s
-            }
+        let parts: [String] = [
+            rating.tag, sort.orderTag, tags.trimmingCharacters(in: .whitespacesAndNewlines),
+        ]
+        .compactMap { s in
+            guard let s = s, !s.isEmpty else { return nil }
+            return s
+        }
         return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 

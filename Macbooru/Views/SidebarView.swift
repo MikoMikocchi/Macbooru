@@ -154,13 +154,51 @@ struct SidebarView: View {
                                         performSavedSearch(item)
                                     }
                                     .contextMenu {
-                                        Button(item.pinned ? "Unpin" : "Pin") { togglePin(item) }
-                                        Button("Delete", role: .destructive) { deleteSaved(item) }
+                                        Button(item.pinned ? "Unpin" : "Pin") {
+                                            togglePin(item)
+                                        }
+                                        Button("Delete", role: .destructive) {
+                                            deleteSaved(item)
+                                        }
                                     }
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxHeight: 132)
+                            .clipped()
                         }
+                    }
+                    // Sort mode (wrap chips)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Sort").font(.subheadline).foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        ChipsFlowLayout(spacing: 8, rowSpacing: 8) {
+                            ForEach(SortMode.allCases) { m in
+                                Button {
+                                    if state.sort != m {
+                                        state.sort = m
+                                        state.resetForNewSearch()
+                                        onSearch?()
+                                    }
+                                } label: {
+                                    Text(m.label)
+                                        .font(.caption)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(
+                                            Capsule().fill(
+                                                state.sort == m
+                                                    ? Color.accentColor.opacity(0.25)
+                                                    : Color.secondary.opacity(0.15)
+                                            )
+                                        )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Rating").font(.subheadline).foregroundStyle(.secondary)
@@ -354,6 +392,11 @@ private struct SuggestList: View {
                             .id(idx)
                         }
                         .buttonStyle(.plain)
+                        #if os(macOS)
+                            .onHover { hovering in
+                                if hovering { selectedIndex = idx }
+                            }
+                        #endif
                         if idx < items.count - 1 { Divider() }
                     }
                 }
@@ -374,12 +417,14 @@ private struct SuggestList: View {
         var attr = AttributedString(text)
         let lower = text.lowercased()
         let query = match.lowercased()
-        if let r = lower.range(of: query),
-            let start = AttributedString.Index(r.lowerBound, within: attr),
-            let end = AttributedString.Index(r.upperBound, within: attr)
-        {
-            let range = start..<end
-            attr[range].inlinePresentationIntent = .stronglyEmphasized
+        var searchStart = lower.startIndex
+        while let r = lower.range(of: query, range: searchStart..<lower.endIndex) {
+            if let start = AttributedString.Index(r.lowerBound, within: attr),
+                let end = AttributedString.Index(r.upperBound, within: attr)
+            {
+                attr[start..<end].inlinePresentationIntent = .stronglyEmphasized
+            }
+            searchStart = r.upperBound
         }
         return Text(attr)
     }
