@@ -9,13 +9,28 @@ import SwiftUI
 
 @main
 struct MacbooruApp: App {
-    private let dependencies = AppDependencies.makeDefault()
+    @StateObject private var dependenciesStore: AppDependenciesStore
+
+    @MainActor
+    init() {
+        _dependenciesStore = StateObject(wrappedValue: AppDependenciesStore())
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environment(\.appDependencies, dependencies)
+                .environment(\.appDependencies, dependenciesStore.dependencies)
+                .environmentObject(dependenciesStore)
         }
         .commands { AppShortcuts() }
+
+        #if os(macOS)
+            Settings {
+                SettingsView()
+                    .environment(\.appDependencies, dependenciesStore.dependencies)
+                    .environmentObject(dependenciesStore)
+                    .frame(width: 420)
+            }
+        #endif
     }
 }

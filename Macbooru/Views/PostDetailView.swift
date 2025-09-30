@@ -12,6 +12,7 @@ struct PostDetailView: View {
     @EnvironmentObject private var search: SearchState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appDependencies) private var dependencies
+    @EnvironmentObject private var dependenciesStore: AppDependenciesStore
 
     // Зум и панорамирование
     @State private var zoom: CGFloat = 1.0
@@ -24,6 +25,7 @@ struct PostDetailView: View {
     @State private var commentsError: String? = nil
     @State private var newComment: String = ""
     @State private var isSubmittingComment = false
+    @State private var isInteractionInProgress = false
 
     private var bestImageCandidates: [URL] {
         [post.largeURL, post.fileURL, post.previewURL].compactMap { $0 }
@@ -227,6 +229,31 @@ struct PostDetailView: View {
                             Label("Copy", systemImage: "doc.on.doc")
                         }
                         .menuStyle(.borderlessButton)
+
+                        Menu {
+                            Button("Favorite", systemImage: "heart") {
+                                Task { await performFavorite(add: true) }
+                            }
+                            Button("Unfavorite", systemImage: "heart.slash") {
+                                Task { await performFavorite(add: false) }
+                            }
+                            Divider()
+                            Button("Vote +1", systemImage: "hand.thumbsup") {
+                                Task { await performVote(score: 1) }
+                            }
+                            Button("Vote -1", systemImage: "hand.thumbsdown") {
+                                Task { await performVote(score: -1) }
+                            }
+                        } label: {
+                            Label("Interact", systemImage: "hand.tap")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .disabled(isInteractionInProgress || !dependenciesStore.hasCredentials)
+                        .help(
+                            dependenciesStore.hasCredentials
+                                ? "Favorite/Vote actions"
+                                : "Укажите учетные данные Danbooru в настройках"
+                        )
 
                         Menu {
                             Button("Reveal Downloads Folder", systemImage: "folder") {
@@ -570,6 +597,46 @@ struct PostDetailView: View {
             return "Network error: \(urlError.localizedDescription)"
         }
         return error.localizedDescription
+    }
+
+    @MainActor
+    private func performFavorite(add: Bool) async {
+        guard dependenciesStore.hasCredentials else {
+            withAnimation { saveMessage = "Добавьте учетные данные Danbooru в Настройках" }
+            return
+        }
+        guard !isInteractionInProgress else { return }
+        isInteractionInProgress = true
+        defer { isInteractionInProgress = false }
+        do {
+            if add {
+                try await dependencies.favoritePost.favorite(postID: post.id)
+                withAnimation { saveMessage = "Добавлено в избранное" }
+            } else {
+                try await dependencies.favoritePost.unfavorite(postID: post.id)
+                withAnimation { saveMessage = "Удалено из избранного" }
+            }
+        } catch {
+            withAnimation { saveMessage = commentErrorMessage(for: error) }
+        }
+    }
+
+    @MainActor
+    private func performVote(score: Int) async {
+        guard dependenciesStore.hasCredentials else {
+            withAnimation { saveMessage = "Добавьте учетные данные Danbooru в Настройках" }
+            return
+        }
+        guard !isInteractionInProgress else { return }
+        isInteractionInProgress = true
+        defer { isInteractionInProgress = false }
+        do {
+            try await dependencies.votePost.vote(postID: post.id, score: score)
+            let message = score >= 0 ? "Оценка +1 отправлена" : "Оценка -1 отправлена"
+            withAnimation { saveMessage = message }
+        } catch {
+            withAnimation { saveMessage = commentErrorMessage(for: error) }
+        }
     }
 
     private func resetZoom() {

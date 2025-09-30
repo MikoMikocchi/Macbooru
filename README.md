@@ -81,9 +81,8 @@ xcodebuild -scheme Macbooru -project Macbooru.xcodeproj -destination 'platform=m
 
 ## Конфигурация и секреты
 
-- Авторизация Danbooru (username + API key) поддерживается на уровне клиента (`DanbooruConfig`),
-  но UI логина и хранение в Keychain пока не реализованы.
-- До добавления UI можно передать креды программно при инициализации клиента.
+- Авторизация Danbooru (username + API key) поддерживается: откройте `Macbooru` → `Settings…` (⌘,) и заполните раздел *Danbooru Credentials*. Данные сохраняются в системном Keychain.
+- Очистка полей и сохранение удаляет значения из Keychain.
 - Соблюдайте ToS Danbooru и учитывайте rate limits.
 
 ## Безопасность контента (NSFW)

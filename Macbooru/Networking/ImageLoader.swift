@@ -320,9 +320,9 @@ struct RemoteImage: View {
 }
 
 private extension Logger {
-    static let subsystem = Bundle.main.bundleIdentifier ?? "Macbooru"
-    static let imageLoader = Logger(subsystem: subsystem, category: "ImageLoader")
-    static let caching = Logger(subsystem: subsystem, category: "Caching")
+    private static let subsystemIdentifier = "Macbooru"
+    static let imageLoader = Logger(subsystem: subsystemIdentifier, category: "ImageLoader")
+    static let caching = Logger(subsystem: subsystemIdentifier, category: "Caching")
 }
 
 // Вспомогательный модификатор для выбора scaledToFit/scaledToFill

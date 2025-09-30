@@ -37,8 +37,12 @@ struct PostGridView: View {
         }
         .navigationTitle("Posts")
         .task { await load(page: 1) }
-        .onChange(of: search.tileSize) { _ in recomputeColumns() }
-        .onChange(of: search.searchTrigger) { _ in Task { await refresh() } }
+        .onChange(of: search.tileSize) { _, _ in
+            recomputeColumns()
+        }
+        .onChange(of: search.searchTrigger) { _, _ in
+            Task { await refresh() }
+        }
         .onAppear { recomputeColumns() }
         .focusedSceneValue(
             \.gridActions,
