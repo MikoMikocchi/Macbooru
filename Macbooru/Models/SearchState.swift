@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import SwiftUI
 
-enum Rating: String, CaseIterable, Identifiable, Codable {
+enum Rating: String, CaseIterable, Identifiable, Codable, Hashable {
     case any, g, s, q, e
     var id: String { rawValue }
     var display: String {
@@ -25,7 +25,7 @@ enum Rating: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum SortMode: String, CaseIterable, Identifiable, Codable {
+enum SortMode: String, CaseIterable, Identifiable, Codable, Hashable {
     case recent  // по умолчанию (без order)
     case newest  // order:id_desc
     case oldest  // order:id_asc
@@ -59,7 +59,7 @@ enum SortMode: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum TileSize: String, CaseIterable, Identifiable {
+enum TileSize: String, CaseIterable, Identifiable, Hashable {
     case small, medium, large
     var id: String { rawValue }
     var title: String { rawValue.capitalized }

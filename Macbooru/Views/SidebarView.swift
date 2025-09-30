@@ -10,6 +10,7 @@ struct SidebarView: View {
     var onSearch: (() -> Void)?
     private let tagsRepo = TagsRepositoryImpl(client: DanbooruClient())
     private let savedStore = SavedSearchStore()
+    private let recentStore = RecentSearchStore()
     @State private var tagQuery: String = ""
     @State private var suggestions: [Tag] = []
     @State private var isLoadingSuggest = false
@@ -20,7 +21,8 @@ struct SidebarView: View {
     @State private var selectedIndex: Int = 0
     // Управление поповером через вычисляемый биндинг: открыт только когда есть подсказки
     @State private var saved: [SavedSearch] = []
-    @State private var isSavedExpanded: Bool = false
+    @AppStorage("sidebar.savedExpanded") private var isSavedExpanded: Bool = false
+    @State private var recent: [RecentSearch] = []
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -67,6 +69,11 @@ struct SidebarView: View {
                         // Enter = выполнить поиск по текущему вводу
                         suggestions.removeAll()
                         state.resetForNewSearch()
+                        let q = state.tags.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !q.isEmpty {
+                            recentStore.addOrTouch(query: q, rating: state.rating, sort: state.sort)
+                            refreshRecent()
+                        }
                         onSearch?()
                     }
                     .focused($isSearchFocused)
@@ -202,6 +209,38 @@ struct SidebarView: View {
                             }
                         }
                     }
+                    // Recent searches
+                    if !recent.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Recent").font(.subheadline).foregroundStyle(.secondary)
+                                Spacer()
+                                Button {
+                                    recentStore.clear()
+                                    refreshRecent()
+                                } label: {
+                                    Label("Clear", systemImage: "xmark.circle")
+                                        .labelStyle(.iconOnly)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Clear recent searches")
+                            }
+                            ChipsFlowLayout(spacing: 8, rowSpacing: 8) {
+                                ForEach(recent) { item in
+                                    RecentChip(item: item) { performRecentSearch(item) }
+                                        .contextMenu {
+                                            Button("Delete", role: .destructive) {
+                                                recentStore.remove(id: item.id)
+                                                refreshRecent()
+                                            }
+                                        }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxHeight: 132)
+                            .clipped()
+                        }
+                    }
                     // Sort mode (wrap chips)
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Sort").font(.subheadline).foregroundStyle(.secondary)
@@ -264,6 +303,11 @@ struct SidebarView: View {
                     .toggleStyle(.switch)
                     Button("Search") {
                         state.resetForNewSearch()
+                        let q = state.tags.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !q.isEmpty {
+                            recentStore.addOrTouch(query: q, rating: state.rating, sort: state.sort)
+                            refreshRecent()
+                        }
                         onSearch?()
                     }
                     .keyboardShortcut(.return, modifiers: [])
@@ -274,7 +318,10 @@ struct SidebarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onAppear { refreshSaved() }
+        .onAppear {
+            refreshSaved()
+            refreshRecent()
+        }
     }
 }
 
@@ -378,6 +425,35 @@ private struct SavedChip: View {
     }
 }
 
+private struct RecentChip: View {
+    let item: RecentSearch
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath").font(.caption2)
+                Text(label)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule().fill(.thinMaterial)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(label)
+    }
+    private var label: String {
+        var parts: [String] = []
+        if item.rating != .any { parts.append(item.rating.display) }
+        if let s = item.sort { parts.append(s.label) }
+        parts.append(item.query)
+        return parts.joined(separator: " · ")
+    }
+}
+
 // Saved logic
 extension SidebarView {
     fileprivate func refreshSaved() {
@@ -405,6 +481,21 @@ extension SidebarView {
     fileprivate func deleteSaved(_ item: SavedSearch) {
         savedStore.remove(id: item.id)
         refreshSaved()
+    }
+
+    // Recent logic
+    fileprivate func refreshRecent() {
+        recent = recentStore.list()
+    }
+    fileprivate func performRecentSearch(_ item: RecentSearch) {
+        state.tags = item.query
+        state.rating = item.rating
+        if let s = item.sort { state.sort = s }
+        state.resetForNewSearch()
+        recentStore.addOrTouch(
+            query: item.query, rating: item.rating, sort: item.sort ?? state.sort)
+        refreshRecent()
+        onSearch?()
     }
 }
 private struct SuggestList: View {
