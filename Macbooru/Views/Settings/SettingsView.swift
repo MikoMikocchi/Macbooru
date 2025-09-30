@@ -425,13 +425,30 @@ private struct SettingsCard<Header: View, Content: View>: View {
         .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
         .padding(22)
         .background(
-            // Лёгкая полупрозрачная подложка для лучшей читаемости на вибранси-фоне окна
-            .thinMaterial,
+            // Едва заметная подложка на системной вибранси
+            .ultraThinMaterial,
             in: RoundedRectangle(cornerRadius: 20, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+        )
+        // Мягкий градиент-штрих для «тиснения» (ярче сверху, к низу исчезает)
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.22),
+                            Color.white.opacity(0.06),
+                            Color.clear,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+                .blendMode(.overlay)
         )
         .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
     }
