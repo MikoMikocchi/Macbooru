@@ -4,17 +4,20 @@ struct SavedSearch: Codable, Identifiable, Hashable {
     var id: UUID
     var query: String  // строка тегов (без rating)
     var rating: Rating  // выбранный рейтинг
+    var sort: SortMode?  // опционально: сохранённая сортировка
     var pinned: Bool  // закреплён
     var createdAt: Date
     var lastUsedAt: Date
 
     init(
-        id: UUID = UUID(), query: String, rating: Rating, pinned: Bool = false,
+        id: UUID = UUID(), query: String, rating: Rating, sort: SortMode? = nil,
+        pinned: Bool = false,
         createdAt: Date = .now, lastUsedAt: Date = .now
     ) {
         self.id = id
         self.query = query
         self.rating = rating
+        self.sort = sort
         self.pinned = pinned
         self.createdAt = createdAt
         self.lastUsedAt = lastUsedAt
@@ -37,12 +40,13 @@ final class SavedSearchStore {
         }
     }
 
-    func addOrUpdate(query: String, rating: Rating) {
+    func addOrUpdate(query: String, rating: Rating, sort: SortMode? = nil) {
         var items = list()
         if let idx = items.firstIndex(where: { $0.query == query && $0.rating == rating }) {
             items[idx].lastUsedAt = .now
+            if let sort { items[idx].sort = sort }
         } else {
-            items.append(SavedSearch(query: query, rating: rating))
+            items.append(SavedSearch(query: query, rating: rating, sort: sort))
         }
         save(items)
     }

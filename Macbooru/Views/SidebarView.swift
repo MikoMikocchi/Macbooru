@@ -20,6 +20,7 @@ struct SidebarView: View {
     @State private var selectedIndex: Int = 0
     // Управление поповером через вычисляемый биндинг: открыт только когда есть подсказки
     @State private var saved: [SavedSearch] = []
+    @State private var isSavedExpanded: Bool = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -147,7 +148,21 @@ struct SidebarView: View {
                     #endif
                     if !saved.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
-                            Text("Saved").font(.subheadline).foregroundStyle(.secondary)
+                            HStack {
+                                Text("Saved").font(.subheadline).foregroundStyle(.secondary)
+                                Spacer()
+                                Button {
+                                    isSavedExpanded.toggle()
+                                } label: {
+                                    Label(
+                                        isSavedExpanded ? "Collapse" : "Expand",
+                                        systemImage: isSavedExpanded ? "chevron.up" : "chevron.down"
+                                    )
+                                    .labelStyle(.iconOnly)
+                                }
+                                .buttonStyle(.plain)
+                                .help(isSavedExpanded ? "Collapse" : "Expand")
+                            }
                             ChipsFlowLayout(spacing: 8, rowSpacing: 8) {
                                 ForEach(saved) { item in
                                     SavedChip(item: item) {
@@ -164,8 +179,19 @@ struct SidebarView: View {
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .frame(maxHeight: 132)
+                            .frame(maxHeight: isSavedExpanded ? .infinity : 132, alignment: .top)
                             .clipped()
+                            .overlay(alignment: .bottom) {
+                                if !isSavedExpanded {
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.clear, Color.black.opacity(0.12),
+                                        ]),
+                                        startPoint: .top, endPoint: .bottom
+                                    )
+                                    .frame(height: 18)
+                                }
+                            }
                         }
                     }
                     // Sort mode (wrap chips)
@@ -340,12 +366,13 @@ extension SidebarView {
     fileprivate func saveCurrentSearch() {
         let query = state.tags.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return }
-        savedStore.addOrUpdate(query: query, rating: state.rating)
+        savedStore.addOrUpdate(query: query, rating: state.rating, sort: state.sort)
         refreshSaved()
     }
     fileprivate func performSavedSearch(_ item: SavedSearch) {
         state.tags = item.query
         state.rating = item.rating
+        if let s = item.sort { state.sort = s }
         state.resetForNewSearch()
         savedStore.touch(id: item.id)
         refreshSaved()
