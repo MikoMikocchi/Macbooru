@@ -1,5 +1,9 @@
 # Macbooru — нативный Danbooru-клиент для macOS
 
+![CI](https://github.com/MikoMikocchi/Macbooru/actions/workflows/ci.yml/badge.svg)
+![Swift](https://img.shields.io/badge/Swift-6.2-orange?logo=swift)
+![Platform](https://img.shields.io/badge/platform-macOS-black?logo=apple)
+
 Нативное приложение на Swift/SwiftUI для просмотра Danbooru на macOS с быстрым поиском, удобной сеткой, детальной карточкой поста, оффлайн‑кешем (базовый), управлением контентом и фокусом на производительности/UX.
 
 > Минимальная поддерживаемая платформа: macOS 15/26 (Sequoia/Tahoe)
