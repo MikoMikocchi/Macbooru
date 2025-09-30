@@ -29,7 +29,7 @@ struct MacbooruApp: App {
                 SettingsView()
                     .environment(\.appDependencies, dependenciesStore.dependencies)
                     .environmentObject(dependenciesStore)
-                    .frame(width: 420)
+                    .frame(minWidth: 920, maxWidth: 960, minHeight: 700)
             }
         #endif
     }

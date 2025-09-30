@@ -6,18 +6,21 @@ struct AppDependencies {
     let favoritePost: FavoritePostUseCase
     let votePost: VotePostUseCase
     let comments: CommentsUseCase
+    let fetchCurrentUser: FetchCurrentUserUseCase
 
     static func makeDefault(config: DanbooruConfig = DanbooruConfig()) -> AppDependencies {
         let client = DanbooruClient(config: config)
         let postsRepository = PostsRepositoryImpl(client: client)
         let tagsRepository = TagsRepositoryImpl(client: client)
+        let accountRepository = AccountRepositoryImpl(client: client)
 
         return AppDependencies(
             searchPosts: DefaultSearchPostsUseCase(postsRepository: postsRepository),
             autocompleteTags: DefaultAutocompleteTagsUseCase(tagsRepository: tagsRepository),
             favoritePost: DefaultFavoritePostUseCase(postsRepository: postsRepository),
             votePost: DefaultVotePostUseCase(postsRepository: postsRepository),
-            comments: DefaultCommentsUseCase(postsRepository: postsRepository)
+            comments: DefaultCommentsUseCase(postsRepository: postsRepository),
+            fetchCurrentUser: DefaultFetchCurrentUserUseCase(repository: accountRepository)
         )
     }
 
@@ -27,7 +30,8 @@ struct AppDependencies {
             autocompleteTags: PreviewAutocompleteTagsUseCase(),
             favoritePost: PreviewFavoritePostUseCase(),
             votePost: PreviewVotePostUseCase(),
-            comments: PreviewCommentsUseCase()
+            comments: PreviewCommentsUseCase(),
+            fetchCurrentUser: PreviewFetchCurrentUserUseCase()
         )
     }
 }
@@ -70,5 +74,11 @@ private struct PreviewCommentsUseCase: CommentsUseCase {
     func load(postID: Int, page: Int, limit: Int) async throws -> [Comment] { [] }
     func create(postID: Int, body: String) async throws -> Comment {
         Comment(id: .random(in: 1...9999), postID: postID, creatorID: nil, creatorName: "Preview", body: body, createdAt: .now)
+    }
+}
+
+private struct PreviewFetchCurrentUserUseCase: FetchCurrentUserUseCase {
+    func execute() async throws -> UserProfile {
+        UserProfile(id: 1, name: "Preview", level: "Member", email: nil, createdAt: .now)
     }
 }

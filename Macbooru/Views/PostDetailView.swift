@@ -59,7 +59,7 @@ struct PostDetailView: View {
                         )
                         .scaleEffect(zoom)
                         .offset(offset)
-                        .onChange(of: zoom) { _ in
+                        .onChange(of: zoom) { _, _ in
                             // При изменении зума (в т.ч. кнопками) удерживаем изображение в пределах рамки
                             offset = clampedOffset(
                                 offset, containerSize: proxy.size, contentBaseHeight: h)
@@ -89,7 +89,7 @@ struct PostDetailView: View {
                                     },
                                     onMagnify: { scale, location in
                                         let old = zoom
-                                        var next = min(6.0, max(0.5, old * scale))
+                                        let next = min(6.0, max(0.5, old * scale))
                                         // удерживаем фокус: корректируем offset так, чтобы точка под курсором оставалась на месте
                                         if old != 0, next != old {
                                             let f = next / old
@@ -698,6 +698,9 @@ struct PostDetailView: View {
             case .missingCredentials:
                 return "Authenticate with Danbooru (API key + username) to use this action."
             case .serverError(let code):
+                if code == 401 || code == 403 {
+                    return "Недостаточно прав или неверные учетные данные."
+                }
                 return "Server error (status \(code)). Try again later."
             case .decoding(let underlying):
                 return "Failed to parse server response: \(underlying.localizedDescription)"
@@ -731,6 +734,7 @@ struct PostDetailView: View {
                 withAnimation { saveMessage = "Удалено из избранного" }
             }
         } catch {
+            handleAuthErrorIfNeeded(error)
             withAnimation { saveMessage = commentErrorMessage(for: error) }
         }
     }
@@ -751,6 +755,7 @@ struct PostDetailView: View {
             lastVoteScore = score
             withAnimation { saveMessage = message }
         } catch {
+            handleAuthErrorIfNeeded(error)
             withAnimation { saveMessage = commentErrorMessage(for: error) }
         }
     }
@@ -786,6 +791,19 @@ struct PostDetailView: View {
 
     private var currentFavoriteState: Bool {
         isFavorited ?? post.isFavorited ?? false
+    }
+
+    private func handleAuthErrorIfNeeded(_ error: Error) {
+        if case APIError.serverError(let code) = error, code == 401 || code == 403 {
+            dependenciesStore.handleAuthenticationFailure(
+                message: "Недействительные учетные данные Danbooru"
+            )
+        }
+        if let apiError = error as? APIError, case .missingCredentials = apiError {
+            dependenciesStore.handleAuthenticationFailure(
+                message: "Укажите учетные данные Danbooru"
+            )
+        }
     }
 
     private func resetZoom() {

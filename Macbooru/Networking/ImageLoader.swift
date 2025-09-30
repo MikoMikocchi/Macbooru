@@ -55,7 +55,7 @@ actor ImageDiskCache {
         do {
             try data.write(to: path, options: [.atomic])
         } catch {
-            Logger.caching.warning("Failed to write image cache: \(error.localizedDescription)")
+            logger.warning("Failed to write image cache: \(error.localizedDescription)")
         }
         enforceLimitIfNeeded()
     }
@@ -129,6 +129,8 @@ actor ImageDiskCache {
             totalSize -= size
         }
     }
+
+    private let logger = Logger(subsystem: "Macbooru", category: "Caching")
 }
 
 final class ThrottledImageLoader {
@@ -394,7 +396,6 @@ struct RemoteImage: View {
 private extension Logger {
     private static let subsystemIdentifier = "Macbooru"
     static let imageLoader = Logger(subsystem: subsystemIdentifier, category: "ImageLoader")
-    static let caching = Logger(subsystem: subsystemIdentifier, category: "Caching")
 }
 
 // Вспомогательный модификатор для выбора scaledToFit/scaledToFill

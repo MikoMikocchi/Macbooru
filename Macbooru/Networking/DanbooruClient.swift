@@ -254,6 +254,22 @@ final class DanbooruClient {
         return try decoder.decode(Comment.self, from: data)
     }
 
+    func fetchCurrentUser() async throws -> UserProfile {
+        var req = URLRequest(url: config.baseURL.appendingPathComponent("/users/current.json"))
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        try applyAuth(to: &req)
+        logger.debug("GET /users/current")
+        let (data, resp) = try await session.data(for: req)
+        guard let http = resp as? HTTPURLResponse else { throw APIError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            logger.error("GET /users/current failed status=\(http.statusCode, privacy: .public)")
+            throw APIError.serverError(http.statusCode)
+        }
+        let decoder = DanbooruClient.makeDecoder()
+        return try decoder.decode(UserProfile.self, from: data)
+    }
+
     private func applyAuth(to request: inout URLRequest) throws {
         guard let user = config.username, let key = config.apiKey else {
             throw APIError.missingCredentials

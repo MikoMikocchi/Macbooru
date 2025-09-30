@@ -83,7 +83,7 @@ final class KeychainCredentialsStore: CredentialsPersisting {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
         ]
-        #if os(macOS)
+        #if !os(macOS)
             query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         #endif
         return query
