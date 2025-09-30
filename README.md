@@ -1,22 +1,29 @@
-# Macbooru — нативный Danbooru-клиент для macOS
+<div align="center">
+
+# Macbooru — нативный Danbooru‑клиент для macOS
 
 ![CI](https://github.com/MikoMikocchi/Macbooru/actions/workflows/ci.yml/badge.svg)
 ![Swift](https://img.shields.io/badge/Swift-6.2-orange?logo=swift)
 ![Platform](https://img.shields.io/badge/platform-macOS-black?logo=apple)
 
-Нативное приложение на Swift/SwiftUI для просмотра Danbooru на macOS с быстрым поиском, удобной сеткой, детальной карточкой поста, оффлайн‑кешем (базовый), управлением контентом и фокусом на производительности/UX.
+<img src="Macbooru/Assets.xcassets/MacbooruAppIcon-iOS-Default-1024x1024@1x.png" alt="Macbooru icon" width="180" height="180" style="border-radius:22%" />
 
-> Минимальная поддерживаемая платформа: macOS 15/26 (Sequoia/Tahoe)
+Нативное приложение на Swift/SwiftUI для просмотра Danbooru на macOS. Быстрый поиск по тегам, удобная сетка, детальная карточка поста, расширенные подсказки и приятный UX.
+
+<sub>Минимальная поддерживаемая платформа: macOS 15/26 (Sequoia/Tahoe)</sub>
+
+</div>
 
 ## Возможности
 
-- Лента постов (recent / popular, по умолчанию recent; popular легко добавить `order:rank`)
-- Поиск по тегам с поддержкой `rating:*` (G/S/Q/E)
-- Адаптивная сетка с плавной прокруткой и постраничной подгрузкой
-- Детальная карточка поста: панорамирование/масштабирование (трекпад/мышь), копирование тегов и ссылок, скачивание изображения
-- Настройка «Blur NSFW (Q/E)» — безопасный просмотр в публичных местах
-- Прогрессивная загрузка превью → large → original с заменой на более детальную версию
-- Обработка ошибок загрузки с ненавязчивым тостом и Retry
+- Поиск по тегам с рейтингами `rating:*` (G/S/Q/E), минус‑тегами и автодополнением
+- Сортировка чипами: Recent, Newest, Oldest, Rank, Score, Favs, Random
+- Сохранённые запросы (Saved) с пином/удалением и ограничением по высоте блока (Expand/Collapse)
+- История поисков (Recent) — быстрый доступ к последним запросам
+- Адаптивная сетка с постраничной подгрузкой и безопасным блюром NSFW (Q/E)
+- Детальная карточка: панорамирование/масштабирование, копирование тегов/ссылок, загрузка изображения
+- Прогрессивная подмена превью на более детальные версии, устойчивый лоадер картинок
+- Ненавязчивые тосты об ошибках и Retry
 
 ## Архитектура
 
@@ -28,7 +35,7 @@
 
 Технологии:
 
-- Swift 5.10+, SwiftUI, Concurrency (async/await)
+- Swift 6.2, SwiftUI, Concurrency (async/await)
 - Сеть: `URLSession`, JSONDecoder (устойчивый ISO8601 разбор с/без миллисекунд)
 - Изображения: собственный лёгкий загрузчик + `NSCache` + `URLCache` (планируется Nuke/DataCache)
 - Логирование: стандартные принты (планируется `os.Logger` + `os_signpost`)
@@ -37,7 +44,7 @@
 
 Папки:
 
-- `Macbooru/Models` — модели (`Post`, `SearchState`)
+- `Macbooru/Models` — модели (`Post`, `SearchState`, `SavedSearch`, `RecentSearch`, `Tag`)
 - `Macbooru/Networking` — клиент, лоадер изображений, URL-хелперы
 - `Macbooru/Repositories` — интерфейсы и реализации репозиториев
 - `Macbooru/Views` — SwiftUI‑экраны (Sidebar, Grid, Post detail)
@@ -87,19 +94,19 @@ xcodebuild -scheme Macbooru -project Macbooru.xcodeproj -destination 'platform=m
 
 ## Известные ограничения / TODO
 
-- Нет экрана логина и хранения API ключа в Keychain
+- Нет экрана логина и хранения API ключа в Keychain (планируется Preferences + Keychain)
 - Нет избранного/голосований/комментариев/пулов/тегов
-- Нет Nuke/DataCache: текущий лоадер работает, но без дискового LRU политики для JSON
-- Нет локализаций ru/en, пока строки зашиты в коде
-- Нет CI (GitHub Actions / Xcode Cloud) и SwiftLint/SwiftFormat (в планах)
+- Nuke/DataCache в планах (сейчас — свой лёгкий лоадер + NSCache/URLCache)
+- Нет локализаций ru/en (пока строки зашиты в коде)
+- Большее покрытие тестами, SwiftLint/SwiftFormat — в планах
 
 ## Вклад в проект
 
 Мы рады PR’ам:
 
-- Разбейте изменения на небольшие коммиты
+- Разбивайте изменения на небольшие PR
 - Пишите тесты для публичного поведения
-- Соблюдайте стиль Swift 5.10, по возможности включайте SwiftLint (скоро добавим конфиг)
+- Соблюдайте стиль Swift 6.x; SwiftLint/SwiftFormat — опционально
 
 Советы по разработке:
 
