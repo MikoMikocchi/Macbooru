@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 #if os(macOS)
@@ -8,6 +9,7 @@ struct SidebarView: View {
     @ObservedObject var state: SearchState
     var onSearch: (() -> Void)?
     private let tagsRepo = TagsRepositoryImpl(client: DanbooruClient())
+    private let savedStore = SavedSearchStore()
     @State private var tagQuery: String = ""
     @State private var suggestions: [Tag] = []
     @State private var isLoadingSuggest = false
@@ -17,6 +19,7 @@ struct SidebarView: View {
     // Клавиатура/хайлайт
     @State private var selectedIndex: Int = 0
     // Управление поповером через вычисляемый биндинг: открыт только когда есть подсказки
+    @State private var saved: [SavedSearch] = []
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -35,104 +38,130 @@ struct SidebarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Search").font(.headline)
-                    TextField("Enter tags…", text: $state.tags)
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: state.tags) { newValue in
-                            scheduleAutocomplete(for: newValue)
+                    HStack(alignment: .center, spacing: 8) {
+                        TextField("Enter tags…", text: $state.tags)
+                            .textFieldStyle(.roundedBorder)
+                        Button {
+                            saveCurrentSearch()
+                        } label: {
+                            Label("Save", systemImage: "bookmark")
+                                .labelStyle(.iconOnly)
+                                .help("Save current query")
                         }
-                        .onSubmit {
-                            // Enter = выполнить поиск по текущему вводу
-                            suggestions.removeAll()
-                            state.resetForNewSearch()
-                            onSearch?()
+                        .buttonStyle(.borderless)
+                    }
+
+                    .onChange(of: state.tags) { newValue in
+                        scheduleAutocomplete(for: newValue)
+                    }
+                    .onSubmit {
+                        // Enter = выполнить поиск по текущему вводу
+                        suggestions.removeAll()
+                        state.resetForNewSearch()
+                        onSearch?()
+                    }
+                    .focused($isSearchFocused)
+                    .onChange(of: isSearchFocused) { newFocused in
+                        if !newFocused { suggestions.removeAll() }
+                    }
+                    // Закрытие по Esc
+                    #if os(macOS)
+                        .onExitCommand { suggestions.removeAll() }
+                        // Навигация стрелками и выбор Enter (macOS 14+)
+                        .onKeyPress(.upArrow) {
+                            moveSelection(1)
+                            return .handled
                         }
-                        .focused($isSearchFocused)
-                        .onChange(of: isSearchFocused) { newFocused in
-                            if !newFocused { suggestions.removeAll() }
-                        }
-                        // Закрытие по Esc
-                        #if os(macOS)
-                            .onExitCommand { suggestions.removeAll() }
-                            // Навигация стрелками и выбор Enter (macOS 14+)
-                            .onKeyPress(.upArrow) {
+                        .onKeyPress(.downArrow) {
+                            if suggestions.isEmpty {
+                                let token = lastToken(in: state.tags)
+                                if token.count >= 2 {
+                                    Task { await loadSuggestions(prefix: token) }
+                                }
+                                selectedIndex = 0
+                                return .handled
+                            } else {
                                 moveSelection(1)
                                 return .handled
                             }
-                            .onKeyPress(.downArrow) {
-                                if suggestions.isEmpty {
-                                    let token = lastToken(in: state.tags)
-                                    if token.count >= 2 {
-                                        Task { await loadSuggestions(prefix: token) }
-                                    }
-                                    selectedIndex = 0
-                                    return .handled
-                                } else {
-                                    moveSelection(1)
-                                    return .handled
-                                }
-                            }
-                            // Enter = принять выделенную подсказку (если она есть) и добавить пробел; иначе — отдать .onSubmit()
-                            .onKeyPress(.return) {
-                                if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex)
-                                {
-                                    insertTag(suggestions[selectedIndex].name, trailingSpace: true)
-                                    return .handled
-                                }
-                                return .ignored
-                            }
-                            .onKeyPress(.upArrow) {
-                                moveSelection(-1)
+                        }
+                        // Enter = принять выделенную подсказку (если она есть) и добавить пробел; иначе — отдать .onSubmit()
+                        .onKeyPress(.return) {
+                            if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex) {
+                                insertTag(suggestions[selectedIndex].name, trailingSpace: true)
                                 return .handled
                             }
-                            // Tab = принять подсказку
-                            .onKeyPress(.tab) {
-                                if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex)
-                                {
-                                    insertTag(suggestions[selectedIndex].name)
-                                    return .handled
-                                }
-                                return .ignored
+                            return .ignored
+                        }
+                        .onKeyPress(.upArrow) {
+                            moveSelection(-1)
+                            return .handled
+                        }
+                        // Tab = принять подсказку
+                        .onKeyPress(.tab) {
+                            if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex) {
+                                insertTag(suggestions[selectedIndex].name)
+                                return .handled
                             }
-                        #endif
-                        // Размещение подсказок: на macOS используем popover, чтобы список не перекрывал поле и не «улетал»
-                        #if os(macOS)
-                            .popover(
-                                isPresented: Binding(
-                                    get: { !suggestions.isEmpty },
-                                    set: { shown in if !shown { suggestions.removeAll() } }
-                                ),
-                                attachmentAnchor: .point(.bottom),
-                                arrowEdge: .top
-                            ) {
+                            return .ignored
+                        }
+                    #endif
+                    // Размещение подсказок: на macOS используем popover, чтобы список не перекрывал поле и не «улетал»
+                    #if os(macOS)
+                        .popover(
+                            isPresented: Binding(
+                                get: { !suggestions.isEmpty },
+                                set: { shown in if !shown { suggestions.removeAll() } }
+                            ),
+                            attachmentAnchor: .point(.bottom),
+                            arrowEdge: .top
+                        ) {
+                            SuggestList(
+                                items: suggestions,
+                                highlight: tagQuery,
+                                selectedIndex: $selectedIndex,
+                                inPopover: true,
+                                onSelect: { insertTag($0.name) }
+                            )
+                            .id(suggestions.count)
+                            .frame(minWidth: 260)
+                            .frame(maxHeight: 260)
+                            .padding(Edge.Set.top, 6)  // небольшой отступ, чтобы стрелка поповера не «накрывала» первый элемент
+                            .padding(Edge.Set.horizontal, 4)
+                        }
+                    #else
+                        .overlay(alignment: .bottomLeading) {
+                            if !suggestions.isEmpty {
                                 SuggestList(
                                     items: suggestions,
                                     highlight: tagQuery,
                                     selectedIndex: $selectedIndex,
-                                    inPopover: true,
+                                    inPopover: false,
                                     onSelect: { insertTag($0.name) }
                                 )
-                                .id(suggestions.count)
-                                .frame(minWidth: 260)
-                                .frame(maxHeight: 260)
-                                .padding(Edge.Set.top, 6)  // небольшой отступ, чтобы стрелка поповера не «накрывала» первый элемент
-                                .padding(Edge.Set.horizontal, 4)
+                                .offset(y: 8)
+                                .zIndex(1000)
+                                .shadow(radius: 8)
                             }
-                        #else
-                            .overlay(alignment: .bottomLeading) {
-                                if !suggestions.isEmpty {
-                                    SuggestList(
-                                        items: suggestions,
-                                        highlight: tagQuery,
-                                        selectedIndex: $selectedIndex,
-                                        inPopover: false,
-                                        onSelect: { insertTag($0.name) }
-                                    )
-                                    .offset(y: 8)
-                                    .zIndex(1000)
-                                    .shadow(radius: 8)
+                        }
+                    #endif
+                    if !saved.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Saved").font(.subheadline).foregroundStyle(.secondary)
+                            ChipsFlowLayout(spacing: 8, rowSpacing: 8) {
+                                ForEach(saved) { item in
+                                    SavedChip(item: item) {
+                                        performSavedSearch(item)
+                                    }
+                                    .contextMenu {
+                                        Button(item.pinned ? "Unpin" : "Pin") { togglePin(item) }
+                                        Button("Delete", role: .destructive) { deleteSaved(item) }
+                                    }
                                 }
                             }
-                        #endif
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Rating").font(.subheadline).foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -173,6 +202,7 @@ struct SidebarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onAppear { refreshSaved() }
     }
 }
 
@@ -238,6 +268,60 @@ extension SidebarView {
 }
 
 // Compact suggest list UI
+private struct SavedChip: View {
+    let item: SavedSearch
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if item.pinned { Image(systemName: "pin.fill").font(.caption2) }
+                Text(label)
+                    .font(.caption)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule().fill(.thinMaterial)
+            )
+        }
+        .buttonStyle(.plain)
+        .help(label)
+    }
+    private var label: String {
+        if item.rating == .any { return item.query }
+        return "\(item.rating.display) · \(item.query)"
+    }
+}
+
+// Saved logic
+extension SidebarView {
+    fileprivate func refreshSaved() {
+        saved = savedStore.list()
+    }
+    fileprivate func saveCurrentSearch() {
+        let query = state.tags.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return }
+        savedStore.addOrUpdate(query: query, rating: state.rating)
+        refreshSaved()
+    }
+    fileprivate func performSavedSearch(_ item: SavedSearch) {
+        state.tags = item.query
+        state.rating = item.rating
+        state.resetForNewSearch()
+        savedStore.touch(id: item.id)
+        refreshSaved()
+        onSearch?()
+    }
+    fileprivate func togglePin(_ item: SavedSearch) {
+        savedStore.togglePin(id: item.id)
+        refreshSaved()
+    }
+    fileprivate func deleteSaved(_ item: SavedSearch) {
+        savedStore.remove(id: item.id)
+        refreshSaved()
+    }
+}
 private struct SuggestList: View {
     let items: [Tag]
     var highlight: String

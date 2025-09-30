@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import SwiftUI
 
-enum Rating: String, CaseIterable, Identifiable {
+enum Rating: String, CaseIterable, Identifiable, Codable {
     case any, g, s, q, e
     var id: String { rawValue }
     var display: String {
