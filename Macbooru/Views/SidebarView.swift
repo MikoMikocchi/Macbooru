@@ -39,30 +39,94 @@ struct SidebarView: View {
             #endif
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass.circle.fill").foregroundStyle(.secondary)
-                        Text("Search").font(.headline).fontWeight(.semibold)
+                VStack(alignment: .leading, spacing: 16) {
+                    // Современный заголовок
+                    HStack(spacing: 12) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(.blue.opacity(0.15))
+                                .frame(width: 32, height: 32)
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.blue)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Search")
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundStyle(.primary)
+                            Text("Find posts with tags")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
                     }
-                    HStack(alignment: .center, spacing: 8) {
+
+                    // Поле поиска с современным дизайном
+                    VStack(spacing: 12) {
                         TextField("Enter tags…", text: $state.tags)
-                            .textFieldStyle(.roundedBorder)
-                        Button {
-                            saveCurrentSearch()
-                        } label: {
-                            Label("Save", systemImage: "bookmark")
-                                .labelStyle(.iconOnly)
-                                .help("Save current query")
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(.white.opacity(0.05))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+                                    )
+                            )
+                            .overlay(alignment: .trailing) {
+                                if !state.tags.isEmpty {
+                                    Button {
+                                        clearSearch()
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.trailing, 12)
+                                }
+                            }
+
+                        // Кнопки действий
+                        HStack(spacing: 8) {
+                            Button {
+                                saveCurrentSearch()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "bookmark")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Save")
+                                        .font(.caption.weight(.medium))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(.blue.opacity(0.1), in: Capsule())
+                                .foregroundStyle(.blue)
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                clearSearch()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Clear")
+                                        .font(.caption.weight(.medium))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(.red.opacity(0.1), in: Capsule())
+                                .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+
+                            Spacer()
                         }
-                        .buttonStyle(.borderless)
-                        Button {
-                            clearSearch()
-                        } label: {
-                            Label("Clear", systemImage: "xmark.circle")
-                                .labelStyle(.iconOnly)
-                                .help("Clear tags and filters")
-                        }
-                        .buttonStyle(.borderless)
                     }
                     // Делаем команды доступными через focusedSceneValue
                     .focusedSceneValue(
@@ -189,28 +253,45 @@ struct SidebarView: View {
                             }
                         }
                     #endif
+                    // Современная секция сохраненных поисков
                     if !saved.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "bookmark.fill").foregroundStyle(.secondary)
-                                Text("Saved").font(.subheadline).fontWeight(.semibold)
-                                    .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(.orange.opacity(0.15))
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "bookmark.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.orange)
+                                }
+
+                                Text("Saved Searches")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
+
                                 Spacer()
+
                                 Button {
-                                    isSavedExpanded.toggle()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        isSavedExpanded.toggle()
+                                    }
                                 } label: {
-                                    Label(
-                                        isSavedExpanded ? "Collapse" : "Expand",
-                                        systemImage: isSavedExpanded ? "chevron.up" : "chevron.down"
+                                    Image(
+                                        systemName: isSavedExpanded ? "chevron.up" : "chevron.down"
                                     )
-                                    .labelStyle(.iconOnly)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                                    .rotationEffect(.degrees(isSavedExpanded ? 180 : 0))
+                                    .animation(.easeInOut(duration: 0.2), value: isSavedExpanded)
                                 }
                                 .buttonStyle(.plain)
-                                .help(isSavedExpanded ? "Collapse" : "Expand")
                             }
+
                             ChipsFlowLayout(spacing: 8, rowSpacing: 8) {
                                 ForEach(saved) { item in
-                                    SavedChip(item: item) {
+                                    ModernSavedChip(item: item) {
                                         performSavedSearch(item)
                                     }
                                     .contextMenu {
@@ -224,54 +305,93 @@ struct SidebarView: View {
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .frame(maxHeight: isSavedExpanded ? .infinity : 132, alignment: .top)
+                            .frame(maxHeight: isSavedExpanded ? .infinity : 100, alignment: .top)
                             .clipped()
                             .overlay(alignment: .bottom) {
-                                if !isSavedExpanded {
+                                if !isSavedExpanded && saved.count > 3 {
                                     LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.clear, Color.black.opacity(0.12),
-                                        ]),
-                                        startPoint: .top, endPoint: .bottom
+                                        colors: [
+                                            Color.clear,
+                                            Color("PrimaryBackground").opacity(0.8),
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
                                     )
-                                    .frame(height: 18)
+                                    .frame(height: 20)
                                 }
                             }
                         }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(.white.opacity(0.03))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                                )
+                        )
                     }
-                    // Recent searches
+                    // Современная секция недавних поисков
                     if !recent.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "clock.fill").foregroundStyle(.secondary)
-                                Text("Recent").font(.subheadline).fontWeight(.semibold)
-                                    .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(.purple.opacity(0.15))
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "clock.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.purple)
+                                }
+
+                                Text("Recent Searches")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.primary)
+
                                 Spacer()
+
                                 Button {
-                                    recentStore.clear()
-                                    refreshRecent()
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        recentStore.clear()
+                                        refreshRecent()
+                                    }
                                 } label: {
-                                    Label("Clear", systemImage: "xmark.circle")
-                                        .labelStyle(.iconOnly)
+                                    Image(systemName: "trash")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.red)
                                 }
                                 .buttonStyle(.plain)
-                                .help("Clear recent searches")
                             }
+
                             ChipsFlowLayout(spacing: 8, rowSpacing: 8) {
                                 ForEach(recent) { item in
-                                    RecentChip(item: item) { performRecentSearch(item) }
-                                        .contextMenu {
-                                            Button("Delete", role: .destructive) {
-                                                recentStore.remove(id: item.id)
-                                                refreshRecent()
-                                            }
+                                    ModernRecentChip(item: item) {
+                                        performRecentSearch(item)
+                                    }
+                                    .contextMenu {
+                                        Button("Delete", role: .destructive) {
+                                            recentStore.remove(id: item.id)
+                                            refreshRecent()
                                         }
+                                    }
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .frame(maxHeight: 132)
+                            .frame(maxHeight: 100)
                             .clipped()
                         }
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(.white.opacity(0.03))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                                )
+                        )
                     }
                     // Sort mode (wrap chips)
                     VStack(alignment: .leading, spacing: 6) {
@@ -545,6 +665,108 @@ extension SidebarView {
 }
 
 // Compact suggest list UI
+// Современные компоненты чипов
+private struct ModernSavedChip: View {
+    let item: SavedSearch
+    var action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if item.pinned {
+                    Image(systemName: "pin.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.orange)
+                }
+                Text(label)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.orange.opacity(hovering ? 0.12 : 0.08))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(.orange.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(hovering ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.hovering = hovering
+            }
+        }
+        .help(label)
+    }
+
+    private var label: String {
+        if item.rating == .any { return item.query }
+        return "\(item.rating.display) · \(item.query)"
+    }
+}
+
+private struct ModernRecentChip: View {
+    let item: RecentSearch
+    var action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.purple)
+                Text(label)
+                    .font(.caption.weight(.medium))
+                    .lineLimit(1)
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.purple.opacity(hovering ? 0.12 : 0.08))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(.purple.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .scaleEffect(hovering ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.hovering = hovering
+            }
+        }
+        .help(label)
+    }
+
+    private var label: String {
+        var parts: [String] = []
+        if item.rating != .any { parts.append(item.rating.display) }
+        if let s = item.sort { parts.append(s.label) }
+        parts.append(item.query)
+        return parts.joined(separator: " · ")
+    }
+}
+
 private struct SavedChip: View {
     let item: SavedSearch
     var action: () -> Void

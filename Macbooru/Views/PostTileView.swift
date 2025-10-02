@@ -8,6 +8,7 @@ struct PostTileView: View {
     let post: Post
     let height: CGFloat
     @State private var hover = false
+    @State private var imageLoaded = false
     @EnvironmentObject private var search: SearchState
     @Environment(\.colorScheme) private var scheme
 
@@ -21,7 +22,7 @@ struct PostTileView: View {
                 animateUpgrades: false,
                 interpolation: search.lowPerformance ? .low : .medium,
                 decoratedBackground: false,
-                cornerRadius: 10
+                cornerRadius: 16
             )
             // Усиленный блюр самого изображения для NSFW
             .blur(
@@ -45,37 +46,68 @@ struct PostTileView: View {
                     }
                 }
             )
-            // Градиентный оверлей снизу для читаемости бейджей
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    imageLoaded = true
+                }
+            }
+
+            // Современный градиентный оверлей
             LinearGradient(
-                gradient: Gradient(colors: [
-                    .black.opacity(0.0), .black.opacity(hover ? 0.65 : 0.45),
-                ]),
-                startPoint: .top,
+                colors: [
+                    .clear,
+                    .black.opacity(hover ? 0.4 : 0.25),
+                    .black.opacity(hover ? 0.7 : 0.5),
+                ],
+                startPoint: UnitPoint(x: 0.5, y: 0.4),
                 endPoint: .bottom
             )
             .allowsHitTesting(false)
+            .animation(.easeInOut(duration: 0.25), value: hover)
 
-            // Инфо-строка
-            HStack(spacing: 8) {
-                if let r = post.rating { SolidRatingChip(rating: r) }
-                if let w = post.width, let h = post.height { SizeBadge(width: w, height: h) }
+            // Инфо-строка с улучшенным дизайном
+            HStack(spacing: 10) {
+                if let r = post.rating {
+                    ModernRatingChip(rating: r)
+                        .transition(.scale.combined(with: .opacity))
+                }
+                if let w = post.width, let h = post.height {
+                    ModernSizeBadge(width: w, height: h)
+                        .transition(.scale.combined(with: .opacity))
+                }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .opacity(hover ? 1 : 0.92)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .opacity(imageLoaded ? (hover ? 1 : 0.95) : 0)
+            .animation(.easeInOut(duration: 0.2), value: hover)
+            .animation(.easeInOut(duration: 0.3).delay(0.1), value: imageLoaded)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-        // Используются унифицированные компоненты RatingChip/ScoreChip/SizeChip из Theme.swift
         .fixedSize(horizontal: false, vertical: true)
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onHover { hover = $0 }
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .scaleEffect(hover ? 1.03 : 1.0)
+        .shadow(
+            color: .black.opacity(hover ? 0.3 : 0.15),
+            radius: hover ? 20 : 8,
+            x: 0,
+            y: hover ? 10 : 4
+        )
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hover)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                hover = hovering
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if post.isFavorited == true {
                 Image(systemName: "heart.fill")
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.pink, .white)
-                    .padding(8)
+                    .padding(12)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .scaleEffect(hover ? 1.1 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hover)
             }
         }
         .contextMenu {
@@ -108,15 +140,83 @@ struct PostTileView: View {
 
 private struct VisualBlurOverlay: View {
     var body: some View {
-        Color.black.opacity(0.35)
-            .overlay(
+        ZStack {
+            Color.black.opacity(0.4)
+
+            VStack(spacing: 8) {
                 Image(systemName: "eye.slash")
-                    .font(.title3.weight(.semibold))
-                    .padding(6)
-                    .background(.thinMaterial, in: Capsule())
+                    .font(.title2.weight(.semibold))
+                Text("Sensitive")
+                    .font(.caption.weight(.medium))
+            }
+            .padding(12)
+            .background(
+                .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .allowsHitTesting(false)
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .allowsHitTesting(false)
+    }
+}
+
+// Более контрастный рейтинг-чип для плитки
+private struct ModernRatingChip: View {
+    let rating: String
+    var body: some View {
+        let r = rating.lowercased()
+        let (bg, icon): (Color, String) = {
+            switch r {
+            case "g": return (.green, "checkmark.seal.fill")
+            case "s": return (.blue, "hand.raised.fill")
+            case "q": return (.orange, "exclamationmark.triangle.fill")
+            default: return (.red, "nosign")
+            }
+        }()
+        HStack(spacing: 6) {
+            Image(systemName: icon).imageScale(.small)
+            Text(r.uppercased()).fontWeight(.bold)
+        }
+        .font(.caption)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            LinearGradient(
+                colors: [bg, bg.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: Capsule()
+        )
+        .foregroundStyle(Color.white)
+        .shadow(color: bg.opacity(0.4), radius: 4, x: 0, y: 2)
+        .overlay(
+            Capsule()
+                .strokeBorder(.white.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// Современный компактный бейдж размера
+private struct ModernSizeBadge: View {
+    let width: Int
+    let height: Int
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "aspectratio").imageScale(.small)
+            Text("\(width)x\(height)").fontWeight(.semibold)
+        }
+        .font(.caption)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(.white.opacity(0.2), lineWidth: 1)
+        )
+        .foregroundStyle(.primary)
+        .shadow(color: .black.opacity(0.2), radius: 3, x: 0, y: 1)
     }
 }
 

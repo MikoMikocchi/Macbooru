@@ -464,6 +464,7 @@ private struct PostsGridScroll: View {
                         .id(post.id)
                         .buttonStyle(.plain)
                         .frame(height: tileHeight)
+                        .modifier(AnimatedItemModifier(index: index))
                         .onAppear {
                             guard infiniteEnabled else { return }
                             let threshold = max(0, posts.count - 5)
@@ -488,6 +489,7 @@ private struct PostsGridScroll: View {
                         .buttonStyle(.plain)
                         .frame(height: tileHeight)
                         .padding(.horizontal, 32)
+                        .modifier(AnimatedItemModifier(index: index))
                         .onAppear {
                             guard infiniteEnabled else { return }
                             let threshold = max(0, posts.count - 5)
@@ -524,44 +526,63 @@ private struct PaginationHUD: View {
     let goLast: () -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
-            IconButton(
-                systemName: "backward.end.fill", disabled: isLoading || currentPage == 1,
-                action: goFirst)
-            IconButton(
-                systemName: "chevron.left", disabled: isLoading || currentPage == 1, action: goPrev)
+        HStack(spacing: 8) {
+            ModernIconButton(
+                systemName: "backward.end.fill",
+                disabled: isLoading || currentPage == 1,
+                action: goFirst
+            )
+            ModernIconButton(
+                systemName: "chevron.left",
+                disabled: isLoading || currentPage == 1,
+                action: goPrev
+            )
 
             HStack(spacing: 6) {
                 ForEach(pages, id: \.self) { p in
-                    PageNumberButton(
-                        number: p, isCurrent: p == currentPage, disabled: isLoading || p < 1
+                    ModernPageButton(
+                        number: p,
+                        isCurrent: p == currentPage,
+                        disabled: isLoading || p < 1
                     ) {
                         selectPage(p)
                     }
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 6)
 
-            IconButton(systemName: "chevron.right", disabled: isLoading, action: goNext)
-            IconButton(
-                systemName: "forward.end.fill", disabled: isLoading, showsProgress: isFindingLast,
-                action: goLast)
+            ModernIconButton(
+                systemName: "chevron.right",
+                disabled: isLoading,
+                action: goNext
+            )
+            ModernIconButton(
+                systemName: "forward.end.fill",
+                disabled: isLoading,
+                showsProgress: isFindingLast,
+                action: goLast
+            )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
+            ZStack {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.white.opacity(0.05))
+            }
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(.white.opacity(0.25), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(.white.opacity(0.15), lineWidth: 1.5)
         )
-        .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
+        .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 5)
+        .shadow(color: .black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
 }
 
-private struct IconButton: View {
+private struct ModernIconButton: View {
     let systemName: String
     var disabled: Bool = false
     var showsProgress: Bool = false
@@ -574,24 +595,44 @@ private struct IconButton: View {
                 if showsProgress {
                     ProgressView()
                         .controlSize(.small)
+                        .tint(.white)
                 } else {
                     Image(systemName: systemName)
+                        .font(.system(size: 14, weight: .semibold))
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .frame(width: 36, height: 36)
+            .background(
+                ZStack {
+                    if hovering && !disabled {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(.white.opacity(0.12))
+                    } else {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(.white.opacity(0.05))
+                    }
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(.white.opacity(hovering && !disabled ? 0.25 : 0.1), lineWidth: 1)
+            )
+            .foregroundStyle(.primary)
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
+        .buttonStyle(.plain)
         .disabled(disabled || showsProgress)
-        .opacity(hovering ? 1.0 : 0.9)
-        .scaleEffect(hovering ? 1.06 : 1.0)
-        .animation(.easeInOut(duration: 0.12), value: hovering)
-        .onHover { hovering = $0 }
+        .opacity(disabled && !showsProgress ? 0.5 : 1.0)
+        .scaleEffect(hovering && !disabled ? 1.05 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.hovering = hovering
+            }
+        }
     }
 }
 
-private struct PageNumberButton: View {
+private struct ModernPageButton: View {
     let number: Int
     var isCurrent: Bool
     var disabled: Bool
@@ -601,19 +642,41 @@ private struct PageNumberButton: View {
     var body: some View {
         Button(action: action) {
             Text("\(number)")
-                .font(.headline)
-                .fontWeight(isCurrent ? .bold : .regular)
-                .frame(minWidth: 34)
-                .padding(.vertical, 6)
+                .font(.system(size: 14, weight: isCurrent ? .bold : .semibold))
+                .frame(width: 36, height: 36)
+                .background(
+                    ZStack {
+                        if isCurrent {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(.white.opacity(0.2))
+                        } else if hovering && !disabled {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(.white.opacity(0.1))
+                        } else {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(.clear)
+                        }
+                    }
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(
+                            isCurrent ? .white.opacity(0.4) : .white.opacity(hovering ? 0.2 : 0.05),
+                            lineWidth: isCurrent ? 1.5 : 1
+                        )
+                )
+                .foregroundStyle(isCurrent ? .primary : .secondary)
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .tint(isCurrent ? .accentColor : .secondary)
+        .buttonStyle(.plain)
         .disabled(disabled)
-        .opacity(hovering ? 1.0 : 0.95)
-        .scaleEffect(hovering ? 1.05 : 1.0)
-        .animation(.easeInOut(duration: 0.12), value: hovering)
-        .onHover { hovering = $0 }
+        .opacity(disabled ? 0.5 : 1.0)
+        .scaleEffect(hovering && !disabled ? 1.05 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.hovering = hovering
+            }
+        }
     }
 }
 
@@ -623,33 +686,81 @@ private struct ErrorToast: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle")
-            Text(message)
-            Button("Retry") { retry() }
-                .buttonStyle(.borderedProminent)
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Error")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.primary)
+            }
+
+            Button("Retry") {
+                retry()
+            }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.red.opacity(0.05))
+            }
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(.red.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
     }
 }
 
 private struct BackToOriginChip: View {
     let page: Int
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 12, weight: .semibold))
                 Text("Back to p\(page)")
+                    .font(.footnote.weight(.medium))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(.blue.opacity(hovering ? 0.15 : 0.1))
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(.blue.opacity(0.3), lineWidth: 1)
+            )
+            .foregroundStyle(.blue)
         }
-        .buttonStyle(.borderedProminent)
-        .buttonBorderShape(.capsule)
-        .tint(.blue)
+        .buttonStyle(.plain)
+        .scaleEffect(hovering ? 1.02 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.hovering = hovering
+            }
+        }
+        .shadow(color: .blue.opacity(0.2), radius: 6, x: 0, y: 3)
     }
 }
 
@@ -677,7 +788,8 @@ struct ContentView: View {
             LinearGradient(
                 colors: [
                     Color("PrimaryBackground"),
-                    Color("SecondaryBackground").opacity(0.95),
+                    Color("SecondaryBackground").opacity(0.85),
+                    Color("PrimaryBackground").opacity(0.9),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -693,5 +805,25 @@ struct ContentView: View {
         // здесь просто увеличим page и дадим сигнал обновиться
         // (упрощённо — можно сделать через ObservableObject/Publisher позже)
         // Ничего не делаем здесь, так как PostGridView сам вызывает .task { load(page:1) }
+    }
+}
+
+// MARK: - Animated Item Modifier
+private struct AnimatedItemModifier: ViewModifier {
+    let index: Int
+    @State private var hasAppeared = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(hasAppeared ? 1 : 0)
+            .offset(y: hasAppeared ? 0 : 20)
+            .onAppear {
+                withAnimation(
+                    .easeOut(duration: 0.3)
+                        .delay(Double(index) * 0.05)
+                ) {
+                    hasAppeared = true
+                }
+            }
     }
 }
