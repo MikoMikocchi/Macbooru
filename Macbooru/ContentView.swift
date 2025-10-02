@@ -8,104 +8,257 @@
 import SwiftData
 import SwiftUI
 
+#if os(macOS)
+    import AppKit
+#endif
+
 struct PostGridView: View {
     @ObservedObject var search: SearchState
     @Environment(\.appDependencies) private var dependencies
+    // Простая пагинация: единый массив текущей страницы
     @State private var posts: [Post] = []
     @State private var isLoading = false
     @State private var lastErrorMessage: String? = nil
     @State private var columns: [GridItem] = []
+    @State private var originPage: Int? = nil
+    @State private var showBackToOrigin: Bool = false
+    @State private var knownMaxPage: Int? = nil
+    @State private var isFindingLast: Bool = false
     private let gridSpacing: CGFloat = 24
+    private let windowRadius: Int = 2
+
+    #if os(macOS)
+        // MARK: - Two-finger swipe support (trackpad) via local scrollWheel monitor
+        private struct TrackpadSwipeMonitor: NSViewRepresentable {
+            let onLeft: () -> Void
+            let onRight: () -> Void
+
+            func makeCoordinator() -> Coordinator { Coordinator(onLeft: onLeft, onRight: onRight) }
+
+            func makeNSView(context: Context) -> NSView {
+                let v = NSView()
+                v.wantsLayer = true
+                v.layer?.backgroundColor = .clear
+                context.coordinator.installMonitor(attachedTo: v)
+                return v
+            }
+
+            func updateNSView(_ nsView: NSView, context: Context) {
+                context.coordinator.installMonitor(attachedTo: nsView)
+            }
+
+            final class Coordinator: NSObject {
+                let onLeft: () -> Void
+                let onRight: () -> Void
+                private var eventMonitorScroll: Any?
+                private var eventMonitorSwipe: Any?
+                private weak var attachedView: NSView?
+                private var lastTriggerTime: TimeInterval = 0
+
+                init(onLeft: @escaping () -> Void, onRight: @escaping () -> Void) {
+                    self.onLeft = onLeft
+                    self.onRight = onRight
+                }
+
+                func installMonitor(attachedTo view: NSView) {
+                    attachedView = view
+                    if eventMonitorScroll == nil {
+                        eventMonitorScroll = NSEvent.addLocalMonitorForEvents(
+                            matching: .scrollWheel
+                        ) { [weak self] event in
+                            guard let self, let attached = self.attachedView else { return event }
+                            guard event.window === attached.window else { return event }
+                            let dx = event.scrollingDeltaX
+                            let dy = event.scrollingDeltaY
+                            let now = CFAbsoluteTimeGetCurrent()
+                            if abs(dx) > abs(dy), abs(dx) > 10, now - lastTriggerTime > 0.25 {
+                                lastTriggerTime = now
+                                if dx < 0 { onLeft() } else { onRight() }
+                            }
+                            return event
+                        }
+                    }
+                    if eventMonitorSwipe == nil {
+                        eventMonitorSwipe = NSEvent.addLocalMonitorForEvents(matching: .swipe) {
+                            [weak self] event in
+                            guard let self, let attached = self.attachedView else { return event }
+                            guard event.window === attached.window else { return event }
+                            let dx = event.deltaX
+                            let now = CFAbsoluteTimeGetCurrent()
+                            if abs(dx) > 0.5, now - lastTriggerTime > 0.25 {
+                                lastTriggerTime = now
+                                if dx < 0 { onLeft() } else { onRight() }
+                                return nil  // потребляем swipe-жест, но это не блокирует клики
+                            }
+                            return event
+                        }
+                    }
+                }
+
+                deinit {
+                    if let m = eventMonitorScroll { NSEvent.removeMonitor(m) }
+                    if let m = eventMonitorSwipe { NSEvent.removeMonitor(m) }
+                }
+            }
+        }
+    #endif
 
     var body: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: gridSpacing) {
-                ForEach(posts) { post in
-                    NavigationLink(value: post) {
-                        PostTileView(post: post, height: search.tileSize.height)
-                            .frame(maxWidth: .infinity)
-                            .contentShape(Rectangle())
-                    }
-                    .id(post.id)
-                    .buttonStyle(.plain)
-                    .frame(height: search.tileSize.height)
-                }
-                if isLoading { ProgressView().padding() }
-            }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
-        }
+        PostsGridScroll(
+            posts: posts,
+            tileHeight: search.tileSize.height,
+            columns: columns,
+            gridSpacing: gridSpacing,
+            isLoading: isLoading
+        )
+        #if os(macOS)
+            .overlay(
+                TrackpadSwipeMonitor(
+                    onLeft: { nextAction() },
+                    onRight: { prevAction() }
+                )
+                .allowsHitTesting(false)
+                .ignoresSafeArea()
+            )
+        #endif
+
         .navigationTitle("Posts")
-        .task { await load(page: 1) }
+        .task { await load(page: 1, replace: true) }
         .onChange(of: search.tileSize) { _, _ in
             recomputeColumns()
         }
         .onChange(of: search.searchTrigger) { _, _ in
-            Task { await refresh() }
+            knownMaxPage = nil
+            originPage = nil
+            showBackToOrigin = false
+            refreshAction()
         }
         .onAppear { recomputeColumns() }
-        .focusedSceneValue(
-            \.gridActions,
-            GridActions(
-                prev: {
-                    guard !isLoading, search.page > 1 else { return }
-                    Task { await load(page: max(1, search.page - 1), replace: true) }
-                },
-                next: {
-                    guard !isLoading else { return }
-                    Task { await load(page: search.page + 1, replace: true) }
-                },
-                refresh: {
-                    Task { await refresh() }
-                }
+        #if os(macOS)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 30)
+                    .onEnded { value in
+                        // горизонтальный двухпальцевый свайп: влево/вправо, не мешаем вертикальному скроллу
+                        let dx = value.translation.width
+                        let dy = value.translation.height
+                        guard abs(dx) > 60, abs(dy) < 40 else { return }
+                        if dx < 0 {
+                            nextAction()
+                        } else {
+                            prevAction()
+                        }
+                    }
             )
-        )
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    Task { await refresh() }
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
+        #endif
+        // .focusedSceneValue(\.gridActions, GridActions(prev: prevAction, next: nextAction, refresh: refreshAction))
+        .toolbar { ToolbarItem(placement: .primaryAction) { refreshButton } }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 8) {
+                paginationOverlay
+                backToOriginOverlay
+                errorOverlay
             }
-            ToolbarItem(placement: .status) {
-                HStack(spacing: 8) {
-                    Button {
-                        guard search.page > 1 else { return }
-                        Task { await load(page: max(1, search.page - 1), replace: true) }
-                    } label: {
-                        Label("Prev", systemImage: "chevron.left")
-                    }
-                    .disabled(isLoading || search.page <= 1)
-                    Text("Page \(search.page)")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Button {
-                        Task { await load(page: search.page + 1, replace: true) }
-                    } label: {
-                        Label("Next", systemImage: "chevron.right")
-                    }
-                    .disabled(isLoading)
-                }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private var refreshButton: some View {
+        Button(action: refreshAction) {
+            Label("Refresh", systemImage: "arrow.clockwise")
+        }
+    }
+
+    @ViewBuilder
+    private var paginationOverlay: some View {
+        let drag = DragGesture(minimumDistance: 15).onEnded { value in
+            guard !isLoading else { return }
+            let w = value.translation.width
+            let magnitude = abs(w)
+            if magnitude < 40 { return }
+            let steps = min(10, Int(magnitude / 120) + 1)
+            let dir = w < 0 ? 1 : -1
+            let target = max(1, search.page + dir * steps)
+            if originPage == nil { originPage = search.page }
+            Task { await load(page: target, replace: true) }
+            if let origin = originPage, abs(target - origin) >= 3 {
+                withAnimation { showBackToOrigin = true }
             }
         }
-        .overlay(alignment: .bottom) {
-            if let msg = lastErrorMessage {
-                HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                    Text(msg)
-                    Button("Retry") { Task { await refresh() } }
-                        .buttonStyle(.borderedProminent)
+
+        PaginationHUD(
+            isLoading: isLoading,
+            isFindingLast: isFindingLast,
+            currentPage: search.page,
+            pages: pagesWindowArray,
+            goFirst: {
+                guard !isLoading else { return }
+                if originPage == nil { originPage = search.page }
+                Task { await load(page: 1, replace: true) }
+                if let origin = originPage, origin > 3 { withAnimation { showBackToOrigin = true } }
+            },
+            goPrev: { prevAction() },
+            selectPage: { p in
+                guard !isLoading else { return }
+                Task { await load(page: max(1, p), replace: true) }
+            },
+            goNext: { nextAction() },
+            goLast: {
+                guard !isLoading else { return }
+                if originPage == nil { originPage = search.page }
+                Task {
+                    if let known = knownMaxPage {
+                        await load(page: known, replace: true)
+                        if let origin = originPage, known - origin >= 3 {
+                            withAnimation { showBackToOrigin = true }
+                        }
+                    } else {
+                        isFindingLast = true
+                        if let last = await findLastPage() {
+                            knownMaxPage = last
+                            await load(page: last, replace: true)
+                            if let origin = originPage, last - origin >= 3 {
+                                withAnimation { showBackToOrigin = true }
+                            }
+                        } else {
+                            withAnimation { lastErrorMessage = "Unable to find last page" }
+                        }
+                        isFindingLast = false
+                    }
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(.ultraThinMaterial, in: Capsule())
+            }
+        )
+        .gesture(drag)
+        .accessibilityLabel("Page controls")
+    }
+
+    @ViewBuilder
+    private var errorOverlay: some View {
+        if let msg = lastErrorMessage {
+            ErrorToast(message: msg, retry: { refreshAction() })
                 .transition(.move(edge: .bottom).combined(with: .opacity))
-                .padding(.bottom, 12)
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                         withAnimation { lastErrorMessage = nil }
                     }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var backToOriginOverlay: some View {
+        if showBackToOrigin, let origin = originPage, origin != search.page {
+            BackToOriginChip(page: origin) {
+                Task { await load(page: origin, replace: true) }
+                withAnimation {
+                    showBackToOrigin = false
+                    originPage = nil
+                }
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                    withAnimation { showBackToOrigin = false }
                 }
             }
         }
@@ -129,17 +282,17 @@ struct PostGridView: View {
                 page: page,
                 limit: search.pageSize
             )
-            if replace {
-                posts = next
-            } else {
-                posts.append(contentsOf: next)
-            }
+            if replace { posts = next } else { posts.append(contentsOf: next) }
             self.search.page = max(1, page)
         } catch {
-            withAnimation {
-                lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"
+            if case APIError.serverError(let status) = error, status == 429 {
+                withAnimation { lastErrorMessage = "Rate limit exceeded. Try again later." }
+            } else {
+                withAnimation {
+                    lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"
+                }
             }
-            print("Failed to load posts: \(error)")
+            print("Failed to load posts for page \(page): \(error)")
         }
     }
 
@@ -147,6 +300,266 @@ struct PostGridView: View {
         columns = [
             GridItem(.adaptive(minimum: search.tileSize.minColumnWidth), spacing: gridSpacing)
         ]
+    }
+
+    // MARK: - Actions
+    private func prevAction() {
+        guard !isLoading, search.page > 1 else { return }
+        Task { await load(page: max(1, search.page - 1), replace: true) }
+    }
+
+    private func nextAction() {
+        guard !isLoading else { return }
+        Task { await load(page: search.page + 1, replace: true) }
+    }
+
+    private func refreshAction() {
+        Task { await refresh() }
+    }
+
+    // MARK: - Pagination window
+    private var pagesWindowArray: [Int] {
+        let current = search.page
+        let start = max(1, current - windowRadius)
+        let end = max(start, current + windowRadius)
+        return Array(start...end)
+    }
+
+    // Поиск последней страницы: экспоненциальный рост и бинарный поиск
+    @MainActor
+    private func findLastPage() async -> Int? {
+        // быстрый гвард: если текущая страница вернула меньше лимита, она и есть последняя
+        if posts.count < search.pageSize { return max(1, search.page) }
+
+        let limit = search.pageSize
+        var low = max(1, search.page)
+        var high = low + 1
+        var requests = 0
+        let maxRequests = 12
+
+        func fetchCount(_ page: Int) async -> Int? {
+            do {
+                let arr = try await dependencies.searchPosts.execute(
+                    query: search.danbooruQuery, page: page, limit: limit)
+                return arr.count
+            } catch {
+                print("findLastPage fetch failed page=\(page): \(error)")
+                return nil
+            }
+        }
+
+        // Поиск верхней границы: постепенное расширение окна
+        while requests < maxRequests {
+            requests += 1
+            if let cnt = await fetchCount(high) {
+                if cnt == 0 {
+                    break  // нашли пустую верхнюю границу
+                } else if cnt < limit {
+                    // high неполная — это последняя
+                    return high
+                } else {
+                    low = high
+                    high = high + 8  // аккуратно расширяем окно, чтобы не бомбить API
+                }
+            } else {
+                break
+            }
+        }
+
+        // Если верхняя граница не найдена, попробуем ещё пару шагов
+        if high <= low { high = low + 8 }
+
+        // Бинарный поиск между low..high, чтобы найти последнюю непустую страницу
+        var left = low
+        var right = high
+        var answer = low
+        while left <= right && requests < maxRequests {
+            let mid = (left + right) / 2
+            requests += 1
+            guard let cnt = await fetchCount(mid) else { break }
+            if cnt == 0 {
+                right = mid - 1
+            } else if cnt < limit {
+                return mid
+            } else {
+                answer = mid
+                left = mid + 1
+            }
+        }
+        return answer
+    }
+}
+
+// MARK: - Subviews
+
+// removed AnyView type eraser to reduce type-checking complexity
+
+private struct PostsGridScroll: View {
+    let posts: [Post]
+    let tileHeight: CGFloat
+    let columns: [GridItem]
+    let gridSpacing: CGFloat
+    let isLoading: Bool
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: gridSpacing) {
+                ForEach(posts) { post in
+                    NavigationLink(value: post) {
+                        PostTileView(post: post, height: tileHeight)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                    }
+                    .id(post.id)
+                    .buttonStyle(.plain)
+                    .frame(height: tileHeight)
+                }
+                if isLoading { ProgressView().padding() }
+            }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
+        }
+    }
+}
+
+private struct PaginationHUD: View {
+    let isLoading: Bool
+    let isFindingLast: Bool
+    let currentPage: Int
+    let pages: [Int]
+    let goFirst: () -> Void
+    let goPrev: () -> Void
+    let selectPage: (Int) -> Void
+    let goNext: () -> Void
+    let goLast: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            IconButton(
+                systemName: "backward.end.fill", disabled: isLoading || currentPage == 1,
+                action: goFirst)
+            IconButton(
+                systemName: "chevron.left", disabled: isLoading || currentPage == 1, action: goPrev)
+
+            HStack(spacing: 6) {
+                ForEach(pages, id: \.self) { p in
+                    PageNumberButton(
+                        number: p, isCurrent: p == currentPage, disabled: isLoading || p < 1
+                    ) {
+                        selectPage(p)
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+
+            IconButton(systemName: "chevron.right", disabled: isLoading, action: goNext)
+            IconButton(
+                systemName: "forward.end.fill", disabled: isLoading, showsProgress: isFindingLast,
+                action: goLast)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(.white.opacity(0.25), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 10, y: 3)
+    }
+}
+
+private struct IconButton: View {
+    let systemName: String
+    var disabled: Bool = false
+    var showsProgress: Bool = false
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if showsProgress {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: systemName)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .disabled(disabled || showsProgress)
+        .opacity(hovering ? 1.0 : 0.9)
+        .scaleEffect(hovering ? 1.06 : 1.0)
+        .animation(.easeInOut(duration: 0.12), value: hovering)
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct PageNumberButton: View {
+    let number: Int
+    var isCurrent: Bool
+    var disabled: Bool
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text("\(number)")
+                .font(.headline)
+                .fontWeight(isCurrent ? .bold : .regular)
+                .frame(minWidth: 34)
+                .padding(.vertical, 6)
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .tint(isCurrent ? .accentColor : .secondary)
+        .disabled(disabled)
+        .opacity(hovering ? 1.0 : 0.95)
+        .scaleEffect(hovering ? 1.05 : 1.0)
+        .animation(.easeInOut(duration: 0.12), value: hovering)
+        .onHover { hovering = $0 }
+    }
+}
+
+private struct ErrorToast: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+            Text(message)
+            Button("Retry") { retry() }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+}
+
+private struct BackToOriginChip: View {
+    let page: Int
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.uturn.backward")
+                Text("Back to p\(page)")
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
+        .tint(.blue)
     }
 }
 

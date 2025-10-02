@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build Macbooru (xcodebuild)",
+			"type": "shell",
+			"command": "xcodebuild -project Macbooru.xcodeproj -scheme Macbooru -configuration Debug -sdk macosx -destination 'platform=macOS' build | xcbeautify",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		}
+	]
+}

@@ -14,7 +14,8 @@ final class AppDependenciesStore: ObservableObject {
 
     init(
         persistence: CredentialsPersisting,
-        factory: @MainActor @escaping (DanbooruConfig) -> AppDependencies = AppDependencies.makeDefault
+        factory: @MainActor @escaping (DanbooruConfig) -> AppDependencies = AppDependencies
+            .makeDefault
     ) {
         self.persistence = persistence
         self.factory = factory
@@ -79,7 +80,12 @@ final class AppDependenciesStore: ObservableObject {
                 return "Укажите Username и API key из настроек Danbooru (My Account → API Key)."
             case .serverError(let status):
                 if status == 401 || status == 403 {
-                    return "Доступ запрещён. Проверьте, верно ли указан API key и имя пользователя." }
+                    return "Доступ запрещён. Проверьте, верно ли указан API key и имя пользователя."
+                }
+                if status == 429 {
+                    return
+                        "Превышен лимит запросов (rate limit). Подождите немного и попробуйте снова."
+                }
                 return "Сервер вернул ошибку (status \(status)). Попробуйте позднее."
             case .invalidResponse:
                 return "Некорректный ответ сервера. Попробуйте ещё раз позже."
