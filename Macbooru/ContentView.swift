@@ -20,6 +20,7 @@ struct PostGridView: View {
     @State private var isLoading = false
     @State private var isLoadingMore = false
     @State private var hasMore = true
+    @State private var nextPageInFlight: Int? = nil
     @State private var lastErrorMessage: String? = nil
     @State private var columns: [GridItem] = []
     @State private var originPage: Int? = nil
@@ -141,6 +142,7 @@ struct PostGridView: View {
             showBackToOrigin = false
             hasMore = true
             isLoadingMore = false
+            nextPageInFlight = nil
             refreshAction()
         }
         .onAppear { recomputeColumns() }
@@ -280,6 +282,7 @@ struct PostGridView: View {
         posts.removeAll()
         hasMore = true
         isLoadingMore = false
+        nextPageInFlight = nil
         await load(page: 1, replace: true)
     }
 
@@ -291,9 +294,11 @@ struct PostGridView: View {
         } else {
             guard !isLoadingMore, hasMore else { return }
             isLoadingMore = true
+            nextPageInFlight = page
         }
         defer {
             if replace { isLoading = false } else { isLoadingMore = false }
+            if !replace { nextPageInFlight = nil }
         }
         do {
             let next = try await dependencies.searchPosts.execute(
@@ -324,7 +329,15 @@ struct PostGridView: View {
     private func loadMoreIfNeeded() async {
         guard search.infiniteScrollEnabled else { return }
         guard hasMore, !isLoadingMore else { return }
-        await load(page: search.page + 1, replace: false)
+        let candidate = search.page + 1
+        if let inflight = nextPageInFlight, inflight >= candidate {
+            return
+        }
+        nextPageInFlight = candidate
+        #if DEBUG
+            print("[InfiniteScroll] loading page=\(candidate) (current=\(search.page))")
+        #endif
+        await load(page: candidate, replace: false)
     }
 
     private func recomputeColumns() {
