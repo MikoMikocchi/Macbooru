@@ -399,6 +399,15 @@ struct SidebarView: View {
                             onSearch?()
                         }
                     }
+                    Toggle(isOn: $state.infiniteScrollEnabled) {
+                        Label("Infinite Scroll", systemImage: "infinity")
+                    }
+                    .toggleStyle(.switch)
+                    .onChange(of: state.infiniteScrollEnabled) { _, _ in
+                        // При переключении — сброс и перезапрос с первой страницы
+                        state.resetForNewSearch()
+                        onSearch?()
+                    }
                     Toggle(isOn: $state.lowPerformance) {
                         Label("Low Performance Mode", systemImage: "tortoise")
                     }

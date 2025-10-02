@@ -89,6 +89,8 @@ final class SearchState: ObservableObject {
     @Published var searchTrigger: Int = 0
     @Published var blurSensitive: Bool = true
     @Published var lowPerformance: Bool = false
+    // Infinite scroll option: when enabled, auto-loads next pages while scrolling
+    @Published var infiniteScrollEnabled: Bool = false
     // Pool search (optional). If set to a valid number, adds `pool:ID` to query
     @Published var poolID: String = ""
     // Layout mode: grid (default) or list (single column grid)

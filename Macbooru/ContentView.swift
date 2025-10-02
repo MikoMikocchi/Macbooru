@@ -18,6 +18,8 @@ struct PostGridView: View {
     // Простая пагинация: единый массив текущей страницы
     @State private var posts: [Post] = []
     @State private var isLoading = false
+    @State private var isLoadingMore = false
+    @State private var hasMore = true
     @State private var lastErrorMessage: String? = nil
     @State private var columns: [GridItem] = []
     @State private var originPage: Int? = nil
@@ -109,8 +111,13 @@ struct PostGridView: View {
             tileHeight: search.tileSize.height,
             columns: columns,
             gridSpacing: gridSpacing,
-            isLoading: isLoading,
-            layout: search.layout
+            isLoading: isLoading || isLoadingMore,
+            layout: search.layout,
+            infiniteEnabled: search.infiniteScrollEnabled,
+            onReachedEnd: {
+                guard search.infiniteScrollEnabled else { return }
+                Task { await loadMoreIfNeeded() }
+            }
         )
         #if os(macOS)
             .overlay(
@@ -132,6 +139,8 @@ struct PostGridView: View {
             knownMaxPage = nil
             originPage = nil
             showBackToOrigin = false
+            hasMore = true
+            isLoadingMore = false
             refreshAction()
         }
         .onAppear { recomputeColumns() }
@@ -155,8 +164,8 @@ struct PostGridView: View {
         .toolbar { ToolbarItem(placement: .primaryAction) { refreshButton } }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                paginationOverlay
-                backToOriginOverlay
+                if !search.infiniteScrollEnabled { paginationOverlay }
+                if !search.infiniteScrollEnabled { backToOriginOverlay }
                 errorOverlay
             }
             .frame(maxWidth: .infinity)
@@ -269,32 +278,53 @@ struct PostGridView: View {
     private func refresh() async {
         search.page = 1
         posts.removeAll()
+        hasMore = true
+        isLoadingMore = false
         await load(page: 1, replace: true)
     }
 
     @MainActor
     private func load(page: Int, replace: Bool = true) async {
-        guard !isLoading else { return }
-        isLoading = true
-        defer { isLoading = false }
+        if replace {
+            guard !isLoading else { return }
+            isLoading = true
+        } else {
+            guard !isLoadingMore, hasMore else { return }
+            isLoadingMore = true
+        }
+        defer {
+            if replace { isLoading = false } else { isLoadingMore = false }
+        }
         do {
             let next = try await dependencies.searchPosts.execute(
                 query: search.danbooruQuery,
                 page: page,
                 limit: search.pageSize
             )
-            if replace { posts = next } else { posts.append(contentsOf: next) }
+            if replace {
+                posts = next
+            } else {
+                posts.append(contentsOf: next)
+            }
+            // hasMore true, если получили полный лимит; иначе достигнут конец
+            hasMore = next.count == search.pageSize
             self.search.page = max(1, page)
         } catch {
-            if case APIError.serverError(let status) = error, status == 429 {
-                withAnimation { lastErrorMessage = "Rate limit exceeded. Try again later." }
-            } else {
-                withAnimation {
-                    lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"
-                }
+            withAnimation {
+                lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"
+            }
+            if !replace {
+                hasMore = false
             }
             print("Failed to load posts for page \(page): \(error)")
         }
+    }
+
+    @MainActor
+    private func loadMoreIfNeeded() async {
+        guard search.infiniteScrollEnabled else { return }
+        guard hasMore, !isLoadingMore else { return }
+        await load(page: search.page + 1, replace: false)
     }
 
     private func recomputeColumns() {
@@ -305,11 +335,13 @@ struct PostGridView: View {
 
     // MARK: - Actions
     private func prevAction() {
+        guard !search.infiniteScrollEnabled else { return }
         guard !isLoading, search.page > 1 else { return }
         Task { await load(page: max(1, search.page - 1), replace: true) }
     }
 
     private func nextAction() {
+        guard !search.infiniteScrollEnabled else { return }
         guard !isLoading else { return }
         Task { await load(page: search.page + 1, replace: true) }
     }
@@ -402,12 +434,15 @@ private struct PostsGridScroll: View {
     let gridSpacing: CGFloat
     let isLoading: Bool
     let layout: SearchState.LayoutMode
+    let infiniteEnabled: Bool
+    var onReachedEnd: (() -> Void)? = nil
 
     var body: some View {
         ScrollView {
             if layout == .grid {
                 LazyVGrid(columns: columns, spacing: gridSpacing) {
-                    ForEach(posts) { post in
+                    // Use enumerated to detect near-end items reliably
+                    ForEach(Array(posts.enumerated()), id: \.1.id) { index, post in
                         NavigationLink(value: post) {
                             PostTileView(post: post, height: tileHeight)
                                 .frame(maxWidth: .infinity)
@@ -416,14 +451,21 @@ private struct PostsGridScroll: View {
                         .id(post.id)
                         .buttonStyle(.plain)
                         .frame(height: tileHeight)
+                        .onAppear {
+                            guard infiniteEnabled else { return }
+                            let threshold = max(0, posts.count - 5)
+                            if index >= threshold { onReachedEnd?() }
+                        }
                     }
                     if isLoading { ProgressView().padding() }
+                    // Keep a sentinel as a fallback; it may help in small datasets
+                    if infiniteEnabled { EndReachedSentinel().onAppear { onReachedEnd?() } }
                 }
                 .padding(.horizontal, 32)
                 .padding(.vertical, 28)
             } else {
                 LazyVStack(alignment: .leading, spacing: gridSpacing) {
-                    ForEach(posts) { post in
+                    ForEach(Array(posts.enumerated()), id: \.1.id) { index, post in
                         NavigationLink(value: post) {
                             PostTileView(post: post, height: tileHeight)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -433,12 +475,27 @@ private struct PostsGridScroll: View {
                         .buttonStyle(.plain)
                         .frame(height: tileHeight)
                         .padding(.horizontal, 32)
+                        .onAppear {
+                            guard infiniteEnabled else { return }
+                            let threshold = max(0, posts.count - 5)
+                            if index >= threshold { onReachedEnd?() }
+                        }
                     }
                     if isLoading { ProgressView().padding() }
+                    if infiniteEnabled { EndReachedSentinel().onAppear { onReachedEnd?() } }
                 }
                 .padding(.vertical, 28)
             }
         }
+    }
+}
+
+// Sentinel view to detect end-of-list appearance
+private struct EndReachedSentinel: View {
+    var body: some View {
+        Color.clear
+            .frame(height: 1)
+            .accessibilityHidden(true)
     }
 }
 
