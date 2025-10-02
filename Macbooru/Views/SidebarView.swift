@@ -312,6 +312,41 @@ struct SidebarView: View {
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
+                            Image(systemName: "tray.full.fill").foregroundStyle(.secondary)
+                            Text("Pool ID").font(.subheadline).fontWeight(.semibold)
+                                .foregroundStyle(
+                                    .secondary)
+                        }
+                        TextField("pool:12345", text: $state.poolID)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                state.resetForNewSearch()
+                                onSearch?()
+                            }
+                            .onChange(of: state.poolID) { _, _ in
+                                // не триггерим сразу поиск, чтобы не дёргать API при наборе — пользователь нажмёт Enter/кнопку
+                            }
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "rectangle.grid.1x2.fill").foregroundStyle(.secondary)
+                            Text("Layout").font(.subheadline).fontWeight(.semibold).foregroundStyle(
+                                .secondary)
+                        }
+                        Picker("Layout", selection: $state.layout) {
+                            ForEach(SearchState.LayoutMode.allCases) { m in
+                                Text(m.label).tag(m)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .controlSize(.small)
+                        .labelsHidden()
+                        .onChange(of: state.layout) { _, _ in
+                            // моментально влияет на представление, без нового запроса
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
                             Image(systemName: "hand.raised.fill").foregroundStyle(.secondary)
                             Text("Rating").font(.subheadline).fontWeight(.semibold).foregroundStyle(
                                 .secondary)

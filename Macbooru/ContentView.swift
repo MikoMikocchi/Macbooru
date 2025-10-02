@@ -109,7 +109,8 @@ struct PostGridView: View {
             tileHeight: search.tileSize.height,
             columns: columns,
             gridSpacing: gridSpacing,
-            isLoading: isLoading
+            isLoading: isLoading,
+            layout: search.layout
         )
         #if os(macOS)
             .overlay(
@@ -400,24 +401,43 @@ private struct PostsGridScroll: View {
     let columns: [GridItem]
     let gridSpacing: CGFloat
     let isLoading: Bool
+    let layout: SearchState.LayoutMode
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: gridSpacing) {
-                ForEach(posts) { post in
-                    NavigationLink(value: post) {
-                        PostTileView(post: post, height: tileHeight)
-                            .frame(maxWidth: .infinity)
-                            .contentShape(Rectangle())
+            if layout == .grid {
+                LazyVGrid(columns: columns, spacing: gridSpacing) {
+                    ForEach(posts) { post in
+                        NavigationLink(value: post) {
+                            PostTileView(post: post, height: tileHeight)
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
+                        }
+                        .id(post.id)
+                        .buttonStyle(.plain)
+                        .frame(height: tileHeight)
                     }
-                    .id(post.id)
-                    .buttonStyle(.plain)
-                    .frame(height: tileHeight)
+                    if isLoading { ProgressView().padding() }
                 }
-                if isLoading { ProgressView().padding() }
+                .padding(.horizontal, 32)
+                .padding(.vertical, 28)
+            } else {
+                LazyVStack(alignment: .leading, spacing: gridSpacing) {
+                    ForEach(posts) { post in
+                        NavigationLink(value: post) {
+                            PostTileView(post: post, height: tileHeight)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .id(post.id)
+                        .buttonStyle(.plain)
+                        .frame(height: tileHeight)
+                        .padding(.horizontal, 32)
+                    }
+                    if isLoading { ProgressView().padding() }
+                }
+                .padding(.vertical, 28)
             }
-            .padding(.horizontal, 32)
-            .padding(.vertical, 28)
         }
     }
 }

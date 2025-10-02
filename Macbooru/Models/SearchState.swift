@@ -89,11 +89,28 @@ final class SearchState: ObservableObject {
     @Published var searchTrigger: Int = 0
     @Published var blurSensitive: Bool = true
     @Published var lowPerformance: Bool = false
+    // Pool search (optional). If set to a valid number, adds `pool:ID` to query
+    @Published var poolID: String = ""
+    // Layout mode: grid (default) or list (single column grid)
+    enum LayoutMode: String, CaseIterable, Identifiable {
+        case grid, list
+        var id: String { rawValue }
+        var label: String { rawValue.capitalized }
+    }
+    @Published var layout: LayoutMode = .grid
 
     // составной запрос для Danbooru: rating:*, затем пользовательские теги
     var danbooruQuery: String? {
+        let poolTag: String? = {
+            let trimmed = poolID.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let id = Int(trimmed), id > 0 { return "pool:\(id)" }
+            return nil
+        }()
         let parts: [String] = [
-            rating.tag, sort.orderTag, tags.trimmingCharacters(in: .whitespacesAndNewlines),
+            rating.tag,
+            sort.orderTag,
+            poolTag,
+            tags.trimmingCharacters(in: .whitespacesAndNewlines),
         ]
         .compactMap { s in
             guard let s = s, !s.isEmpty else { return nil }
