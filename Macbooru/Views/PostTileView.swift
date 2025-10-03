@@ -28,22 +28,29 @@ struct PostTileView: View {
             .blur(radius: blurRadius)
             .overlay(sensitiveOverlay)
             .onAppear {
-                withAnimation(Theme.Animations.hover().delay(0.05)) {
+                if search.lowPerformance {
                     imageLoaded = true
+                } else {
+                    withAnimation(Theme.Animations.hover().delay(0.05)) {
+                        imageLoaded = true
+                    }
                 }
             }
 
             Theme.Gradients.modernOverlay(opacity: hover ? 0.7 : 0.52)
                 .allowsHitTesting(false)
-                .animation(Theme.Animations.hover(), value: hover)
+                .animation(search.lowPerformance ? nil : Theme.Animations.hover(), value: hover)
 
             infoRow
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .opacity(imageLoaded ? (hover ? 1.0 : 0.94) : 0)
                 .offset(y: imageLoaded ? 0 : 14)
-                .animation(Theme.Animations.hover(), value: hover)
-                .animation(Theme.Animations.interactive().delay(0.12), value: imageLoaded)
+                .animation(search.lowPerformance ? nil : Theme.Animations.hover(), value: hover)
+                .animation(
+                    search.lowPerformance ? nil : Theme.Animations.interactive().delay(0.12),
+                    value: imageLoaded
+                )
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(
@@ -126,14 +133,20 @@ struct PostTileView: View {
             .symbolRenderingMode(.palette)
             .foregroundStyle(.pink, .white)
             .padding(12)
-            .background(.ultraThinMaterial, in: Circle())
-            .scaleEffect(hover ? 1.08 : 1.0)
-            .animation(Theme.Animations.interactive(), value: hover)
+            .background(
+                search.lowPerformance
+                    ? AnyShapeStyle(Theme.ColorPalette.controlBackground)
+                    : AnyShapeStyle(.ultraThinMaterial),
+                in: Circle()
+            )
+            .scaleEffect(search.lowPerformance ? 1.0 : (hover ? 1.08 : 1.0))
+            .animation(search.lowPerformance ? nil : Theme.Animations.interactive(), value: hover)
     }
 }
 
 private struct VisualBlurOverlay: View {
     var cornerRadius: CGFloat
+    @Environment(\.lowPerformance) private var lowPerf
 
     var body: some View {
         ZStack {
@@ -147,7 +160,10 @@ private struct VisualBlurOverlay: View {
             }
             .padding(12)
             .background(
-                .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                lowPerf
+                    ? AnyShapeStyle(Color.white.opacity(0.15))
+                    : AnyShapeStyle(.ultraThinMaterial),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)

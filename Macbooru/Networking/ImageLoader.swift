@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
-import os
 import SwiftUI
+import os
 
 #if os(macOS)
     import AppKit
@@ -32,7 +32,8 @@ actor ImageDiskCache {
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
         let base = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-        let dir = base?.appendingPathComponent("MacbooruImageCache", isDirectory: true)
+        let dir =
+            base?.appendingPathComponent("MacbooruImageCache", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(
                 "MacbooruImageCache",
                 isDirectory: true
@@ -66,11 +67,13 @@ actor ImageDiskCache {
     }
 
     func currentUsageBytes() -> Int {
-        guard let files = try? fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.fileSizeKey],
-            options: .skipsHiddenFiles
-        ) else { return 0 }
+        guard
+            let files = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.fileSizeKey],
+                options: .skipsHiddenFiles
+            )
+        else { return 0 }
         return files.reduce(0) { partial, url in
             let values = try? url.resourceValues(forKeys: [.fileSizeKey])
             let size = values?.fileSize ?? 0
@@ -89,7 +92,10 @@ actor ImageDiskCache {
     }
 
     func clear() {
-        guard let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil, options: []) else {
+        guard
+            let files = try? fileManager.contentsOfDirectory(
+                at: directory, includingPropertiesForKeys: nil, options: [])
+        else {
             return
         }
         for url in files {
@@ -99,11 +105,13 @@ actor ImageDiskCache {
 
     private func enforceLimitIfNeeded() {
         guard maxSizeBytes > 0 else { return }
-        guard var files = try? fileManager.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
-            options: .skipsHiddenFiles
-        ) else { return }
+        guard
+            var files = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+                options: .skipsHiddenFiles
+            )
+        else { return }
 
         var totalSize = files.reduce(0) { partial, url in
             let values = try? url.resourceValues(forKeys: [.fileSizeKey])
@@ -114,9 +122,13 @@ actor ImageDiskCache {
         guard totalSize > maxSizeBytes else { return }
 
         files.sort { lhs, rhs in
-            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+            let lhsDate =
+                (try? lhs.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate)
                 ?? Date.distantPast
-            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+            let rhsDate =
+                (try? rhs.resourceValues(forKeys: [.contentModificationDateKey])
+                    .contentModificationDate)
                 ?? Date.distantPast
             return lhsDate < rhsDate
         }
@@ -160,10 +172,13 @@ final class ThrottledImageLoader {
         if let diskData = await ImageDiskCache.shared.data(for: url) {
             if let diskImage = try? await decodeImage(data: diskData) {
                 await ImageMemoryCache.shared.set(diskImage, for: url)
-                logger.debug("Loaded image from disk cache: \(url.lastPathComponent, privacy: .public)")
+                logger.debug(
+                    "Loaded image from disk cache: \(url.lastPathComponent, privacy: .public)")
                 return diskImage
             } else {
-                logger.debug("Disk cache entry failed to decode for \(url.lastPathComponent, privacy: .public)")
+                logger.debug(
+                    "Disk cache entry failed to decode for \(url.lastPathComponent, privacy: .public)"
+                )
             }
         }
         var req = URLRequest(url: url)
@@ -183,7 +198,8 @@ final class ThrottledImageLoader {
                 let image = try await decodeImage(data: data)
                 await ImageMemoryCache.shared.set(image, for: url)
                 await ImageDiskCache.shared.store(data, for: url)
-                logger.debug("Loaded image from network: \(url.lastPathComponent, privacy: .public)")
+                logger.debug(
+                    "Loaded image from network: \(url.lastPathComponent, privacy: .public)")
                 return image
             } catch {
                 lastError = error
@@ -211,50 +227,50 @@ final class ThrottledImageLoader {
     }
 
     private func decodeImage(data: Data) async throws -> PlatformImage {
-#if os(macOS)
-        let image: NSImage? = await MainActor.run {
-            if let rep = NSBitmapImageRep(data: data) {
-                let size = NSSize(width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
-                rep.size = size
-                let image = NSImage(size: size)
-                image.addRepresentation(rep)
-                image.isTemplate = false
-                return image
-            }
-            if let src = CGImageSourceCreateWithData(data as CFData, nil),
-                let cg = CGImageSourceCreateImageAtIndex(
-                    src, 0, [kCGImageSourceShouldCache: true] as CFDictionary)
-            {
-                let size = NSSize(width: cg.width, height: cg.height)
-                let image = NSImage(cgImage: cg, size: size)
-                image.isTemplate = false
-                return image
-            }
-            if let image = NSImage(data: data) {
-                if image.size == .zero,
-                    let rep = image.representations.first as? NSBitmapImageRep
-                {
-                    image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+        #if os(macOS)
+            let image: NSImage? = await MainActor.run {
+                if let rep = NSBitmapImageRep(data: data) {
+                    let size = NSSize(width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
+                    rep.size = size
+                    let image = NSImage(size: size)
+                    image.addRepresentation(rep)
+                    image.isTemplate = false
+                    return image
                 }
-                image.isTemplate = false
-                return image
+                if let src = CGImageSourceCreateWithData(data as CFData, nil),
+                    let cg = CGImageSourceCreateImageAtIndex(
+                        src, 0, [kCGImageSourceShouldCache: true] as CFDictionary)
+                {
+                    let size = NSSize(width: cg.width, height: cg.height)
+                    let image = NSImage(cgImage: cg, size: size)
+                    image.isTemplate = false
+                    return image
+                }
+                if let image = NSImage(data: data) {
+                    if image.size == .zero,
+                        let rep = image.representations.first as? NSBitmapImageRep
+                    {
+                        image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                    }
+                    image.isTemplate = false
+                    return image
+                }
+                return nil
             }
-            return nil
-        }
-        guard let image else { throw URLError(.cannotDecodeContentData) }
-        logger.debug(
-            "Decoded image (macOS) \(Int(image.size.width))x\(Int(image.size.height))"
-        )
-        return image
-#else
-        guard let image = UIImage(data: data, scale: UIScreen.main.scale) else {
-            throw URLError(.cannotDecodeContentData)
-        }
-        logger.debug(
-            "Decoded image (iOS) \(Int(image.size.width))x\(Int(image.size.height))"
-        )
-        return image
-#endif
+            guard let image else { throw URLError(.cannotDecodeContentData) }
+            logger.debug(
+                "Decoded image (macOS) \(Int(image.size.width))x\(Int(image.size.height))"
+            )
+            return image
+        #else
+            guard let image = UIImage(data: data, scale: UIScreen.main.scale) else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            logger.debug(
+                "Decoded image (iOS) \(Int(image.size.width))x\(Int(image.size.height))"
+            )
+            return image
+        #endif
     }
 }
 
@@ -268,6 +284,7 @@ struct RemoteImage: View {
     var decoratedBackground: Bool = true
     var cornerRadius: CGFloat = 8
 
+    @Environment(\.lowPerformance) private var lowPerf
     @State private var image: PlatformImage? = nil
     @State private var pixelCount: Int = 0
     @State private var isLoading = false
@@ -280,12 +297,12 @@ struct RemoteImage: View {
                 #if os(macOS)
                     Image(nsImage: image)
                         .resizable()
-                        .interpolation(interpolation)
+                        .interpolation(lowPerf ? .none : interpolation)
                         .modifier(Scaled(contentMode: contentMode))
                 #else
                     Image(uiImage: image)
                         .resizable()
-                        .interpolation(interpolation)
+                        .interpolation(lowPerf ? .none : interpolation)
                         .modifier(Scaled(contentMode: contentMode))
                 #endif
             } else if isLoading {
@@ -308,7 +325,7 @@ struct RemoteImage: View {
         .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .top)
         .background(
             Group {
-                if decoratedBackground {
+                if decoratedBackground && !lowPerf {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.2))
                 }
@@ -343,7 +360,7 @@ struct RemoteImage: View {
                     firstShownIndex = idx
                     await MainActor.run {
                         if Task.isCancelled { return }
-                        if animateFirstAppearance {
+                        if animateFirstAppearance && !lowPerf {
                             withAnimation(.easeInOut(duration: 0.12)) {
                                 self.image = img
                                 self.pixelCount = newPixels
@@ -358,7 +375,7 @@ struct RemoteImage: View {
                 } else if newPixels > pixelCount {  // улучшение — заменить
                     await MainActor.run {
                         if Task.isCancelled { return }
-                        if animateUpgrades {
+                        if animateUpgrades && !lowPerf {
                             withAnimation(.easeInOut(duration: 0.18)) {
                                 self.image = img
                                 self.pixelCount = newPixels
@@ -393,9 +410,10 @@ struct RemoteImage: View {
     }
 }
 
-private extension Logger {
+extension Logger {
     private static let subsystemIdentifier = "Macbooru"
-    static let imageLoader = Logger(subsystem: subsystemIdentifier, category: "ImageLoader")
+    fileprivate static let imageLoader = Logger(
+        subsystem: subsystemIdentifier, category: "ImageLoader")
 }
 
 // Вспомогательный модификатор для выбора scaledToFit/scaledToFill

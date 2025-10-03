@@ -166,7 +166,10 @@ enum Theme {
             #endif
         }
 
+        @Environment(\.lowPerformance) private static var lowPerf
+
         static func interactive(_ style: SpringStyle = .standard) -> Animation {
+            if lowPerf { return .linear(duration: 0) }
             let profile = profile(for: style)
             return Animation.spring(
                 response: profile.response,
@@ -176,13 +179,15 @@ enum Theme {
         }
 
         static func hover(duration: Double? = nil) -> Animation {
-            Animation.easeInOut(duration: duration ?? hoverDuration)
+            if lowPerf { return .linear(duration: 0) }
+            return Animation.easeInOut(duration: duration ?? hoverDuration)
         }
 
         static func stagger(index: Int, baseDelay: Double? = nil, style: SpringStyle = .standard)
             -> Animation
         {
-            interactive(style).delay(Double(index) * (baseDelay ?? defaultStagger))
+            if lowPerf { return .linear(duration: 0) }
+            return interactive(style).delay(Double(index) * (baseDelay ?? defaultStagger))
         }
     }
 
@@ -227,10 +232,16 @@ enum Theme {
             case subtle
         }
 
+        @Environment(\.lowPerformance) private var lowPerf
+
         func body(content: Content) -> some View {
             content
                 .padding(.all, 0)
-                .background(backgroundForStyle)
+                .background(
+                    Group {
+                        if lowPerf { Color.clear } else { backgroundForStyle }
+                    }
+                )
                 .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
                 .overlay(
                     Group {
@@ -243,16 +254,18 @@ enum Theme {
                 )
                 .shadow(
                     color: Theme.ColorPalette.shadowSoft.opacity(
-                        isHover && hoverElevates ? 1 : 0.8),
-                    radius: isHover && hoverElevates ? 22 : 14,
+                        lowPerf ? 0.4 : (isHover && hoverElevates ? 1 : 0.8)),
+                    radius: lowPerf ? 6 : (isHover && hoverElevates ? 22 : 14),
                     x: 0,
-                    y: isHover && hoverElevates ? 10 : 6
+                    y: lowPerf ? 2 : (isHover && hoverElevates ? 10 : 6)
                 )
-                .scaleEffect(isHover && hoverElevates ? 1.015 : 1.0)
-                .animation(Animations.interactive(), value: isHover)
+                .scaleEffect(lowPerf ? 1.0 : (isHover && hoverElevates ? 1.015 : 1.0))
+                .animation(lowPerf ? nil : Animations.interactive(), value: isHover)
                 .onHover { hovering in
-                    withAnimation(Animations.hover()) {
+                    if lowPerf {
                         isHover = hovering
+                    } else {
+                        withAnimation(Animations.hover()) { isHover = hovering }
                     }
                 }
         }
@@ -294,20 +307,28 @@ enum Theme {
         var hoverBinding: Binding<Bool>? = nil
         @State private var hovering = false
 
+        @Environment(\.lowPerformance) private var lowPerf
+
         func body(content: Content) -> some View {
             content
-                .scaleEffect(hovering ? scale : 1.0)
+                .scaleEffect(lowPerf ? 1.0 : (hovering ? scale : 1.0))
                 .shadow(
-                    color: Theme.ColorPalette.shadowSoft.opacity(hovering ? 1 : 0.6),
-                    radius: hovering ? shadow : 10,
+                    color: Theme.ColorPalette.shadowSoft.opacity(
+                        lowPerf ? 0.4 : (hovering ? 1 : 0.6)),
+                    radius: lowPerf ? 6 : (hovering ? shadow : 10),
                     x: 0,
-                    y: hovering ? 10 : 4
+                    y: lowPerf ? 2 : (hovering ? 10 : 4)
                 )
-                .animation(Animations.interactive(), value: hovering)
+                .animation(lowPerf ? nil : Animations.interactive(), value: hovering)
                 .onHover { value in
-                    withAnimation(Animations.hover()) {
+                    if lowPerf {
                         hovering = value
                         hoverBinding?.wrappedValue = value
+                    } else {
+                        withAnimation(Animations.hover()) {
+                            hovering = value
+                            hoverBinding?.wrappedValue = value
+                        }
                     }
                 }
         }
@@ -398,6 +419,8 @@ enum Theme {
 
         @State private var hovering = false
 
+        @Environment(\.lowPerformance) private var lowPerf
+
         var body: some View {
             Button(action: action) {
                 ZStack {
@@ -418,9 +441,13 @@ enum Theme {
                             RoundedRectangle(
                                 cornerRadius: Constants.compactCornerRadius, style: .continuous
                             )
-                            .fill(hovering && !isDisabled ? hoverBackground : background)
+                            .fill(
+                                lowPerf
+                                    ? background
+                                    : (hovering && !isDisabled ? hoverBackground : background)
+                            )
                             .background(
-                                usesMaterial
+                                (usesMaterial && !lowPerf)
                                     ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear)
                             )
                         } else {
@@ -436,19 +463,22 @@ enum Theme {
                             )
                             .strokeBorder(
                                 ColorPalette.glassBorder.opacity(
-                                    hovering && !isDisabled ? 0.8 : 0.5), lineWidth: 1)
+                                    lowPerf ? 0.5 : (hovering && !isDisabled ? 0.8 : 0.5)),
+                                lineWidth: 1)
                         }
                     }
                 )
-                .scaleEffect(hovering && !isDisabled ? 1.05 : 1.0)
+                .scaleEffect(lowPerf ? 1.0 : (hovering && !isDisabled ? 1.05 : 1.0))
             }
             .buttonStyle(.plain)
             .disabled(isDisabled || showsProgress)
             .opacity(isDisabled && !showsProgress ? 0.55 : 1.0)
-            .animation(Animations.interactive(), value: hovering)
+            .animation(lowPerf ? nil : Animations.interactive(), value: hovering)
             .onHover { value in
-                withAnimation(Animations.hover()) {
+                if lowPerf {
                     hovering = value
+                } else {
+                    withAnimation(Animations.hover()) { hovering = value }
                 }
             }
         }
@@ -461,6 +491,7 @@ enum Theme {
         var action: () -> Void
 
         @State private var hovering = false
+        @Environment(\.lowPerformance) private var lowPerf
 
         var body: some View {
             Button(action: action) {
@@ -478,13 +509,21 @@ enum Theme {
                                     cornerRadius: Constants.compactCornerRadius, style: .continuous
                                 )
                                 .fill(ColorPalette.glassBase)
-                                .background(.ultraThinMaterial)
+                                .background(
+                                    lowPerf
+                                        ? AnyShapeStyle(Color.clear)
+                                        : AnyShapeStyle(.ultraThinMaterial)
+                                )
                             } else if hovering && !isDisabled {
                                 RoundedRectangle(
                                     cornerRadius: Constants.compactCornerRadius, style: .continuous
                                 )
                                 .fill(ColorPalette.controlHover)
-                                .background(.ultraThinMaterial)
+                                .background(
+                                    lowPerf
+                                        ? AnyShapeStyle(Color.clear)
+                                        : AnyShapeStyle(.ultraThinMaterial)
+                                )
                             } else {
                                 RoundedRectangle(
                                     cornerRadius: Constants.compactCornerRadius, style: .continuous
@@ -504,15 +543,19 @@ enum Theme {
                             lineWidth: isCurrent ? 1.6 : 1
                         )
                     )
-                    .scaleEffect(hovering && !isDisabled ? 1.05 : 1.0)
+                    .scaleEffect(lowPerf ? 1.0 : (hovering && !isDisabled ? 1.05 : 1.0))
             }
             .buttonStyle(.plain)
             .disabled(isDisabled)
             .opacity(isDisabled ? 0.45 : 1.0)
-            .animation(Animations.interactive(), value: hovering)
+            .animation(lowPerf ? nil : Animations.interactive(), value: hovering)
             .onHover { value in
-                withAnimation(Animations.hover()) {
+                if lowPerf {
                     hovering = value
+                } else {
+                    withAnimation(Animations.hover()) {
+                        hovering = value
+                    }
                 }
             }
         }
@@ -566,9 +609,11 @@ enum Theme {
         }
 
         var kind: Kind = .primary
+        @Environment(\.lowPerformance) private var lowPerf
 
         func makeBody(configuration: Configuration) -> some View {
             let isPressed = configuration.isPressed
+            let effectivePressed = lowPerf ? false : isPressed
             let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
 
             let background: AnyView = {
@@ -581,12 +626,18 @@ enum Theme {
                     )
                     return AnyView(shape.fill(gradient))
                 case .secondary:
-                    return AnyView(
-                        ZStack {
+                    if lowPerf {
+                        return AnyView(
                             shape.fill(ColorPalette.controlBackground)
-                            shape.fill(.ultraThinMaterial)
-                        }
-                    )
+                        )
+                    } else {
+                        return AnyView(
+                            ZStack {
+                                shape.fill(ColorPalette.controlBackground)
+                                shape.fill(.ultraThinMaterial)
+                            }
+                        )
+                    }
                 case .destructive:
                     let gradient = LinearGradient(
                         colors: [ColorPalette.danger, ColorPalette.danger.opacity(0.82)],
@@ -617,24 +668,26 @@ enum Theme {
 
             return configuration.label
                 .font(.callout.weight(.semibold))
-                .foregroundStyle(foreground.opacity(isPressed ? 0.8 : 1.0))
+                .foregroundStyle(foreground.opacity(effectivePressed ? 0.8 : 1.0))
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
                 .background(background)
                 .overlay(
                     shape.strokeBorder(
-                        strokeColor.opacity(isPressed ? 0.6 : 1.0),
+                        strokeColor.opacity(effectivePressed ? 0.6 : 1.0),
                         lineWidth: 1
                     )
                 )
                 .shadow(
-                    color: ColorPalette.shadowSoft.opacity(kind == .secondary ? 0.4 : 0.6),
-                    radius: 8,
+                    color: ColorPalette.shadowSoft.opacity(
+                        kind == .secondary ? (lowPerf ? 0.3 : 0.4) : (lowPerf ? 0.4 : 0.6)
+                    ),
+                    radius: lowPerf ? 4 : 8,
                     x: 0,
-                    y: 3
+                    y: lowPerf ? 1 : 3
                 )
-                .scaleEffect(isPressed ? 0.97 : 1.0)
-                .animation(Animations.interactive(), value: isPressed)
+                .scaleEffect(lowPerf ? 1.0 : (isPressed ? 0.97 : 1.0))
+                .animation(lowPerf ? nil : Animations.interactive(), value: isPressed)
         }
     }
 }

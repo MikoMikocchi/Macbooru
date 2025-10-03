@@ -476,6 +476,7 @@ struct TagChip: View {
     var tint: Color
     var onOpen: (() -> Void)?
     var onCopy: (() -> Void)?
+    @Environment(\.lowPerformance) private var lowPerf
 
     var body: some View {
         #if os(macOS)
@@ -502,11 +503,18 @@ struct TagChip: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(
-                ZStack {
-                    Capsule(style: .continuous)
-                        .fill(tint.opacity(0.18))
-                    Capsule(style: .continuous)
-                        .fill(.ultraThinMaterial)
+                Group {
+                    if lowPerf {
+                        Capsule(style: .continuous)
+                            .fill(tint.opacity(0.18))
+                    } else {
+                        ZStack {
+                            Capsule(style: .continuous)
+                                .fill(tint.opacity(0.18))
+                            Capsule(style: .continuous)
+                                .fill(.ultraThinMaterial)
+                        }
+                    }
                 }
             )
             .overlay(

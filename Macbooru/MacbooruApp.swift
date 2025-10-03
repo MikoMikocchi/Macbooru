@@ -23,6 +23,7 @@ struct MacbooruApp: App {
                 .environment(\.appDependencies, dependenciesStore.dependencies)
                 .environmentObject(dependenciesStore)
                 .environmentObject(search)
+                .lowPerformance(search.lowPerformance)
         }
         .commands { AppShortcuts() }
 
@@ -32,6 +33,7 @@ struct MacbooruApp: App {
                     .environment(\.appDependencies, dependenciesStore.dependencies)
                     .environmentObject(dependenciesStore)
                     .environmentObject(search)
+                    .lowPerformance(search.lowPerformance)
                     .frame(minWidth: 920, maxWidth: 960, minHeight: 700)
             }
         #endif

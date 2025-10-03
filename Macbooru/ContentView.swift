@@ -664,6 +664,7 @@ struct ContentView: View {
 // MARK: - Animated Item Modifier
 private struct AnimatedItemModifier: ViewModifier {
     let index: Int
+    @Environment(\.lowPerformance) private var lowPerf
     @State private var hasAppeared = false
 
     func body(content: Content) -> some View {
@@ -672,7 +673,9 @@ private struct AnimatedItemModifier: ViewModifier {
             .offset(y: hasAppeared ? 0 : 20)
             .onAppear {
                 guard !hasAppeared else { return }
-                withAnimation(Theme.Animations.stagger(index: index)) {
+                let anim: Animation =
+                    lowPerf ? .linear(duration: 0) : Theme.Animations.stagger(index: index)
+                withAnimation(anim) {
                     hasAppeared = true
                 }
             }
