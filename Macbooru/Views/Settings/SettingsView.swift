@@ -22,7 +22,10 @@ struct SettingsView: View {
     @AppStorage("settings.blurSensitiveDefault") private var blurSensitiveDefault: Bool = true
 
     private var cardColumns: [GridItem] {
-        [GridItem(.adaptive(minimum: 320, maximum: 520), spacing: 24)]
+        [
+            GridItem(.flexible(minimum: 360), spacing: 24),
+            GridItem(.flexible(minimum: 360), spacing: 24),
+        ]
     }
 
     enum StatusMessage: Equatable {
@@ -215,9 +218,11 @@ struct SettingsView: View {
     }
 
     private var cacheSection: some View {
-        SettingsCard(header: {
-            Label("Кеш изображений", systemImage: "externaldrive.fill.badge.timemachine")
-        }) {
+        SettingsCard(
+            header: {
+                Label("Кеш изображений", systemImage: "externaldrive.fill.badge.timemachine")
+            }, minHeight: 360
+        ) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Максимальный размер кеша")
                     .font(.subheadline.weight(.semibold))
@@ -258,9 +263,11 @@ struct SettingsView: View {
     }
 
     private var generalSection: some View {
-        SettingsCard(header: {
-            Label("Общие настройки", systemImage: "slider.horizontal.3")
-        }) {
+        SettingsCard(
+            header: {
+                Label("Общие настройки", systemImage: "slider.horizontal.3")
+            }, minHeight: 360
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 ToggleRow(
                     title: "Бесконечная прокрутка",
@@ -340,7 +347,7 @@ struct SettingsView: View {
         SettingsCard(
             header: {
                 Label("Состояние", systemImage: "bell")
-            }, minHeight: 220
+            }, minHeight: 240
         ) {
             VStack(alignment: .leading, spacing: 16) {
                 if let status {
