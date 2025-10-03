@@ -154,7 +154,11 @@ struct SettingsView: View {
                     GridRow {
                         Text("Username").settingsLabel()
                         TextField("Username", text: $username)
-                            .textFieldStyle(.roundedBorder)
+                            .themedInputField(
+                                systemImage: "person.fill",
+                                trailingSystemImage: username.isEmpty ? nil : "xmark.circle.fill",
+                                onTrailingTap: username.isEmpty ? nil : { username = "" }
+                            )
                             .textContentType(.username)
                             .disableAutocorrection(true)
                             .frame(maxWidth: 280)
@@ -162,7 +166,11 @@ struct SettingsView: View {
                     GridRow {
                         Text("API Key").settingsLabel()
                         SecureField("API Key", text: $apiKey)
-                            .textFieldStyle(.roundedBorder)
+                            .themedInputField(
+                                systemImage: "key.fill",
+                                trailingSystemImage: apiKey.isEmpty ? nil : "xmark.circle.fill",
+                                onTrailingTap: apiKey.isEmpty ? nil : { apiKey = "" }
+                            )
                             .textContentType(.password)
                             .disableAutocorrection(true)
                             .frame(maxWidth: 280)
@@ -170,10 +178,10 @@ struct SettingsView: View {
                 }
 
                 Text(
-                    "Данные хранятся в системном Keychain и используются для избранного/голосований/комментариев."
+                    "Данные хранятся в системном Keychain и используются для избранного, голосований и комментариев."
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.ColorPalette.textMuted)
 
                 if let profile = dependenciesStore.profile {
                     AccountSummaryView(profile: profile)
@@ -189,7 +197,7 @@ struct SettingsView: View {
                     Button(role: .destructive, action: clearCredentials) {
                         Label("Очистить", systemImage: "trash")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(Theme.GlassButtonStyle(kind: .destructive))
                     .disabled(!(dependenciesStore.credentials.hasCredentials))
 
                     Button(action: saveCredentials) {
@@ -199,7 +207,8 @@ struct SettingsView: View {
                             Label("Сохранить", systemImage: "checkmark.circle.fill")
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
+                    .disabled(isSaving)
                 }
             }
         }
@@ -214,12 +223,13 @@ struct SettingsView: View {
                     .font(.subheadline.weight(.semibold))
 
                 Slider(value: $cacheLimitMB, in: 128...1024, step: 64)
+                    .tint(Theme.ColorPalette.accent)
 
                 HStack {
                     Text("Текущий лимит: \(Int(cacheLimitMB)) МБ")
                     Spacer()
                     Text("Используется: \(formattedMB(cacheUsageMB)) МБ")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.ColorPalette.textMuted)
                 }
 
                 HStack(spacing: 12) {
@@ -230,7 +240,7 @@ struct SettingsView: View {
                             Label("Применить", systemImage: "arrow.triangle.2.circlepath")
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
                     .disabled(isUpdatingCacheLimit || Int(cacheLimitMB) == Int(appliedCacheLimitMB))
 
                     Button(role: .destructive, action: clearCacheStorage) {
@@ -240,7 +250,7 @@ struct SettingsView: View {
                             Label("Очистить", systemImage: "trash")
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(Theme.GlassButtonStyle(kind: .destructive))
                     .disabled(isClearingCache || cacheUsageMB <= 0.1)
                 }
             }
@@ -251,16 +261,27 @@ struct SettingsView: View {
         SettingsCard(header: {
             Label("Общие настройки", systemImage: "slider.horizontal.3")
         }) {
-            VStack(alignment: .leading, spacing: 16) {
-                Toggle(isOn: $autoRefreshOnLaunch) {
-                    Label("Обновлять список постов при запуске", systemImage: "arrow.clockwise")
-                }
-                Toggle(isOn: $showKeyboardHints) {
-                    Label("Показывать подсказки горячих клавиш", systemImage: "command")
-                }
-                Toggle(isOn: $blurSensitiveDefault) {
-                    Label("Размывать контент NSFW по умолчанию", systemImage: "eye.slash")
-                }
+            VStack(alignment: .leading, spacing: 12) {
+                ToggleRow(
+                    title: "Обновлять список постов при запуске",
+                    subtitle: "Автоматически загружает свежие посты при старте приложения.",
+                    systemImage: "arrow.clockwise",
+                    isOn: $autoRefreshOnLaunch
+                )
+                Divider().opacity(0.1)
+                ToggleRow(
+                    title: "Показывать подсказки горячих клавиш",
+                    subtitle: "Отображает команды в интерфейсе и тултипах.",
+                    systemImage: "command",
+                    isOn: $showKeyboardHints
+                )
+                Divider().opacity(0.1)
+                ToggleRow(
+                    title: "Размывать контент NSFW по умолчанию",
+                    subtitle: "Применяет блюр к чувствительным постам и деталям.",
+                    systemImage: "eye.slash",
+                    isOn: $blurSensitiveDefault
+                )
             }
         }
     }
@@ -269,25 +290,32 @@ struct SettingsView: View {
         SettingsCard(
             header: {
                 Label("Дополнительно", systemImage: "info.circle")
-            }, minHeight: 220
+            }, minHeight: 240
         ) {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Ссылки и инструменты")
                     .font(.subheadline.weight(.semibold))
-                VStack(alignment: .leading, spacing: 12) {
-                    Link(
+                    .foregroundStyle(Theme.ColorPalette.textSecondary)
+                VStack(alignment: .leading, spacing: 10) {
+                    LinkRow(
+                        title: "Документация API",
+                        subtitle: "danbooru.donmai.us",
+                        systemImage: "doc.text",
                         destination: URL(string: "https://danbooru.donmai.us/wiki_pages/help:api")!
+                    )
+                    ActionRow(
+                        title: "Открыть Keychain",
+                        subtitle: "Управление сохранёнными ключами доступа",
+                        systemImage: "key"
                     ) {
-                        Label("Документация API", systemImage: "doc.text")
-                    }
-                    Button {
                         openKeychainApp()
-                    } label: {
-                        Label("Открыть Keychain", systemImage: "key")
                     }
-                    Link(destination: URL(string: "https://github.com/MikoMikocchi/Macbooru")!) {
-                        Label("Проект на GitHub", systemImage: "link")
-                    }
+                    LinkRow(
+                        title: "Проект на GitHub",
+                        subtitle: "github.com/MikoMikocchi/Macbooru",
+                        systemImage: "link",
+                        destination: URL(string: "https://github.com/MikoMikocchi/Macbooru")!
+                    )
                 }
             }
         }
@@ -352,19 +380,164 @@ private struct StatusBanner: View {
     let tint: Color
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: symbol)
-                .foregroundColor(tint)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(tint)
             Text(text)
-                .font(.subheadline)
-                .foregroundColor(tint)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(tint)
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(tint.opacity(0.12))
+                .background(.ultraThinMaterial)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(tint.opacity(0.28), lineWidth: 1)
+        )
+        .shadow(color: tint.opacity(0.18), radius: 10, x: 0, y: 4)
+    }
+}
+
+private struct ToggleRow: View {
+    let title: String
+    var subtitle: String?
+    let systemImage: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            HStack(spacing: 12) {
+                icon
+                VStack(alignment: .leading, spacing: subtitle == nil ? 0 : 4) {
+                    Text(title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Theme.ColorPalette.textPrimary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(Theme.ColorPalette.textMuted)
+                    }
+                }
+            }
+        }
+        .toggleStyle(SwitchToggleStyle(tint: Theme.ColorPalette.accent))
+        .padding(.vertical, 4)
+    }
+
+    private var icon: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Theme.ColorPalette.controlBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Theme.ColorPalette.glassBorder.opacity(0.6), lineWidth: 1)
+            )
+            .frame(width: 34, height: 34)
+            .overlay(
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.ColorPalette.accent)
+            )
+    }
+}
+
+private struct RowBase<Accessory: View>: View {
+    let title: String
+    var subtitle: String?
+    let systemImage: String
+    var tint: Color
+    let accessory: () -> Accessory
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            icon
+            VStack(alignment: .leading, spacing: subtitle == nil ? 0 : 4) {
+                Text(title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Theme.ColorPalette.textPrimary)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Theme.ColorPalette.textMuted)
+                }
+            }
+            Spacer(minLength: 0)
+            accessory()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Theme.ColorPalette.controlBackground.opacity(hovering ? 1.0 : 0.85))
+                .background(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Theme.ColorPalette.glassBorder.opacity(hovering ? 0.7 : 0.45), lineWidth: 1)
+        )
+        .scaleEffect(hovering ? 1.02 : 1.0)
+        .shadow(color: Theme.ColorPalette.shadowSoft.opacity(0.45), radius: hovering ? 9 : 6, x: 0, y: hovering ? 4 : 2)
+        .animation(Theme.Animations.interactive, value: hovering)
+        .onHover { hovering = $0 }
+    }
+
+    private var icon: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(tint.opacity(0.14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(tint.opacity(0.35), lineWidth: 1)
+            )
+            .frame(width: 34, height: 34)
+            .overlay(
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+            )
+    }
+}
+
+private struct LinkRow: View {
+    let title: String
+    var subtitle: String?
+    let systemImage: String
+    let destination: URL
+    var tint: Color = Theme.ColorPalette.accent
+
+    var body: some View {
+        Link(destination: destination) {
+            RowBase(title: title, subtitle: subtitle, systemImage: systemImage, tint: tint) {
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.ColorPalette.textMuted)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ActionRow: View {
+    let title: String
+    var subtitle: String?
+    let systemImage: String
+    var tint: Color = Theme.ColorPalette.accent
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            RowBase(title: title, subtitle: subtitle, systemImage: systemImage, tint: tint) {
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.ColorPalette.textMuted)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -423,34 +596,8 @@ private struct SettingsCard<Header: View, Content: View>: View {
             content()
         }
         .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
-        .padding(22)
-        .background(
-            // Едва заметная подложка на системной вибранси
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-        )
-        // Мягкий градиент-штрих для «тиснения» (ярче сверху, к низу исчезает)
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.22),
-                            Color.white.opacity(0.06),
-                            Color.clear,
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-                .blendMode(.overlay)
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 8, x: 0, y: 2)
+        .padding(Theme.Constants.cardPadding)
+        .glassCard(cornerRadius: 20, hoverElevates: false)
     }
 }
 

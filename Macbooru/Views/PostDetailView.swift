@@ -38,15 +38,137 @@ struct PostDetailView: View {
 
     private let commentsPageSize = 40
 
+    private let imageCornerRadius: CGFloat = 24
+
     private var bestImageCandidates: [URL] {
         [post.largeURL, post.fileURL, post.previewURL].compactMap { $0 }
     }
     private var pageURL: URL { URL(string: "https://danbooru.donmai.us/posts/\(post.id)")! }
 
+    private var openMenu: some View {
+        Menu {
+            Button("Open post page", systemImage: "link") {
+                #if os(macOS)
+                    NSWorkspace.shared.open(pageURL)
+                #endif
+            }
+            if let u = post.largeURL {
+                Button("Open large", systemImage: "safari") {
+                    #if os(macOS)
+                        NSWorkspace.shared.open(u)
+                    #endif
+                }
+            }
+            if let u = post.fileURL {
+                Button("Open original", systemImage: "safari") {
+                    #if os(macOS)
+                        NSWorkspace.shared.open(u)
+                    #endif
+                }
+            }
+            if let src = post.source, let u = URL(string: src) {
+                Button("Open source", systemImage: "safari") {
+                    #if os(macOS)
+                        NSWorkspace.shared.open(u)
+                    #endif
+                }
+            }
+        } label: {
+            ActionChip(title: "Open", systemImage: "safari", tint: .cyan)
+        }
+        .menuStyle(.borderlessButton)
+    }
+
+    private var copyMenu: some View {
+        Menu {
+            Button("Copy post URL", systemImage: "link") { copyPostURL() }
+            if post.fileURL != nil || post.largeURL != nil {
+                Button("Copy image", systemImage: "photo.on.rectangle") {
+                    Task { await copyImageToPasteboard() }
+                }
+            }
+            if post.fileURL != nil {
+                Button("Copy original URL", systemImage: "link.badge.plus") {
+                    copyOriginalURL()
+                }
+            }
+            if let src = post.source, URL(string: src) != nil {
+                Button("Copy source URL", systemImage: "doc.on.doc") {
+                    copySourceURL()
+                }
+            }
+            Divider()
+            Button("Copy tags", systemImage: "doc.on.doc") {
+                copyTagsToPasteboard()
+            }
+        } label: {
+            ActionChip(title: "Copy", systemImage: "doc.on.doc", tint: .mint)
+        }
+        .menuStyle(.borderlessButton)
+    }
+
+    private var interactMenu: some View {
+        Menu {
+            Button {
+                Task { await performFavorite(add: !currentFavoriteState) }
+            } label: {
+                Label(
+                    currentFavoriteState ? "Убрать из избранного" : "В избранное",
+                    systemImage: currentFavoriteState ? "heart.slash" : "heart"
+                )
+            }
+            .disabled(isInteractionInProgress || !dependenciesStore.hasCredentials)
+
+            Divider()
+
+            Button {
+                Task { await performVote(score: 1) }
+            } label: {
+                Label("Vote +1", systemImage: "hand.thumbsup")
+            }
+            .disabled(
+                isInteractionInProgress
+                    || !dependenciesStore.hasCredentials
+                    || lastVoteScore == 1
+            )
+
+            Button {
+                Task { await performVote(score: -1) }
+            } label: {
+                Label("Vote -1", systemImage: "hand.thumbsdown")
+            }
+            .disabled(
+                isInteractionInProgress
+                    || !dependenciesStore.hasCredentials
+                    || lastVoteScore == -1
+            )
+        } label: {
+            ActionChip(title: "Interact", systemImage: "hand.tap", tint: .pink)
+        }
+        .menuStyle(.borderlessButton)
+        .disabled(!dependenciesStore.hasCredentials)
+        .help(
+            dependenciesStore.hasCredentials
+                ? "Избранное и голосование"
+                : "Укажите учетные данные Danbooru в настройках"
+        )
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button("Reveal Downloads Folder", systemImage: "folder") {
+                revealDownloadsFolder()
+            }
+        } label: {
+            ActionChip(title: "More", systemImage: "ellipsis.circle", tint: Theme.ColorPalette.textMuted)
+        }
+        .menuStyle(.borderlessButton)
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 24) {
             // Левая колонка — изображение + действия
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 20) {
                 ZStack(alignment: .topTrailing) {
                     GeometryReader { proxy in
                         let h = max(420.0, proxy.size.height)
@@ -55,7 +177,9 @@ struct PostDetailView: View {
                             height: h,
                             contentMode: ContentMode.fit,
                             animateFirstAppearance: true,
-                            animateUpgrades: true
+                            animateUpgrades: true,
+                            decoratedBackground: false,
+                            cornerRadius: imageCornerRadius
                         )
                         .scaleEffect(zoom)
                         .offset(offset)
@@ -155,419 +279,80 @@ struct PostDetailView: View {
                     .frame(minHeight: 460)
 
                     // Плавающие контролы зума
-                    HStack(spacing: 8) {
-                        Button {
-                            resetZoom()
-                        } label: {
-                            Label("Fit", systemImage: "arrow.down.right.and.arrow.up.left")
-                        }
+                    HStack(spacing: 10) {
+                        Theme.IconButton(
+                            systemName: "arrow.down.right.and.arrow.up.left",
+                            action: resetZoom
+                        )
                         .help("Сбросить зум и позицию")
-                        Button {
-                            stepZoom(in: -1)
-                        } label: {
-                            Label("-", systemImage: "minus.magnifyingglass")
-                        }
-                        Button {
-                            stepZoom(in: +1)
-                        } label: {
-                            Label("+", systemImage: "plus.magnifyingglass")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .font(.callout)
-                    .padding(8)
-                }
 
-                // Действия (компактно)
-                HStack(spacing: 12) {
-                    // Группа меню с собственной контрастной подложкой
-                    HStack(spacing: 12) {
-                        Menu {
-                            Button("Open post page", systemImage: "link") {
-                                #if os(macOS)
-                                    NSWorkspace.shared.open(pageURL)
-                                #endif
-                            }
-                            if let u = post.largeURL {
-                                Button("Open large", systemImage: "safari") {
-                                    #if os(macOS)
-                                        NSWorkspace.shared.open(u)
-                                    #endif
-                                }
-                            }
-                            if let u = post.fileURL {
-                                Button("Open original", systemImage: "safari") {
-                                    #if os(macOS)
-                                        NSWorkspace.shared.open(u)
-                                    #endif
-                                }
-                            }
-                            if let src = post.source, let u = URL(string: src) {
-                                Button("Open source", systemImage: "safari") {
-                                    #if os(macOS)
-                                        NSWorkspace.shared.open(u)
-                                    #endif
-                                }
-                            }
-                        } label: {
-                            Label("Open", systemImage: "safari")
-                        }
-                        .menuStyle(.borderlessButton)
-
-                        Menu {
-                            Button("Copy post URL", systemImage: "link") { copyPostURL() }
-                            if post.fileURL != nil || post.largeURL != nil {
-                                Button("Copy image", systemImage: "photo.on.rectangle") {
-                                    Task { await copyImageToPasteboard() }
-                                }
-                            }
-                            if post.fileURL != nil {
-                                Button("Copy original URL", systemImage: "link.badge.plus") {
-                                    copyOriginalURL()
-                                }
-                            }
-                            if let src = post.source, URL(string: src) != nil {
-                                Button("Copy source URL", systemImage: "doc.on.doc") {
-                                    copySourceURL()
-                                }
-                            }
-                            Divider()
-                            Button("Copy tags", systemImage: "doc.on.doc") {
-                                copyTagsToPasteboard()
-                            }
-                        } label: {
-                            Label("Copy", systemImage: "doc.on.doc")
-                        }
-                        .menuStyle(.borderlessButton)
-
-                        Menu {
-                            Button {
-                                Task { await performFavorite(add: !currentFavoriteState) }
-                            } label: {
-                                Label(
-                                    currentFavoriteState ? "Убрать из избранного" : "В избранное",
-                                    systemImage: currentFavoriteState ? "heart.slash" : "heart"
-                                )
-                            }
-                            .disabled(isInteractionInProgress || !dependenciesStore.hasCredentials)
-
-                            Divider()
-
-                            Button {
-                                Task { await performVote(score: 1) }
-                            } label: {
-                                Label("Vote +1", systemImage: "hand.thumbsup")
-                            }
-                            .disabled(
-                                isInteractionInProgress
-                                    || !dependenciesStore.hasCredentials
-                                    || lastVoteScore == 1
-                            )
-
-                            Button {
-                                Task { await performVote(score: -1) }
-                            } label: {
-                                Label("Vote -1", systemImage: "hand.thumbsdown")
-                            }
-                            .disabled(
-                                isInteractionInProgress
-                                    || !dependenciesStore.hasCredentials
-                                    || lastVoteScore == -1
-                            )
-                        } label: {
-                            Label("Interact", systemImage: "hand.tap")
-                        }
-                        .menuStyle(.borderlessButton)
-                        .disabled(!dependenciesStore.hasCredentials)
-                        .help(
-                            dependenciesStore.hasCredentials
-                                ? "Избранное и голосование"
-                                : "Укажите учетные данные Danbooru в настройках"
+                        Theme.IconButton(
+                            systemName: "minus.magnifyingglass",
+                            action: { stepZoom(in: -1) }
                         )
 
-                        Menu {
-                            Button("Reveal Downloads Folder", systemImage: "folder") {
-                                revealDownloadsFolder()
-                            }
-                        } label: {
-                            Label("More", systemImage: "ellipsis.circle")
-                        }
-                        .menuStyle(.borderlessButton)
+                        Theme.IconButton(
+                            systemName: "plus.magnifyingglass",
+                            action: { stepZoom(in: +1) }
+                        )
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .padding(10)
                     .background(
-                        Capsule(style: .continuous).fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Theme.ColorPalette.controlBackground)
+                            .background(.ultraThinMaterial)
                     )
                     .overlay(
-                        Capsule(style: .continuous)
-                            .strokeBorder(.white.opacity(0.25), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
                     )
-                    .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-
-                    Button {
-                        Task { await downloadBestImage() }
-                    } label: {
-                        Label("Download", systemImage: "tray.and.arrow.down")
-                    }
-                    .disabled(bestImageCandidates.isEmpty)
-                    .buttonStyle(.borderedProminent)
-                    .tint(.accentColor)
-                    .buttonBorderShape(.capsule)
-
-                    Spacer()
+                    .padding(12)
                 }
-                // Контрастные кнопки/меню под артом — стили даём локально,
-                // чтобы Menu-лейблы не затирались глобальным стилем
-                .controlSize(.large)
-                .font(.callout)
-                .padding(.top, 4)
+
+                .padding(18)
+                .glassCard(cornerRadius: imageCornerRadius, hoverElevates: false)
+
+                ActionsCard(
+                    openMenu: { openMenu },
+                    copyMenu: { copyMenu },
+                    interactMenu: { interactMenu },
+                    moreMenu: { moreMenu },
+                    onDownload: { Task { await downloadBestImage() } },
+                    downloadDisabled: bestImageCandidates.isEmpty
+                )
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
 
             // Правая колонка — Info и Tags
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    GroupBox("Info") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("ID:")
-                                Text("#\(post.id)").bold()
-                                Spacer()
-                                if let r = post.rating { RatingBadge(rating: r) }
-                            }
-                            if let w = post.width, let h = post.height {
-                                HStack {
-                                    Text("Size:")
-                                    Text("\(w)x\(h)")
-                                }
-                            }
-                            if let score = post.score {
-                                HStack {
-                                    Text("Score:")
-                                    Text("\(score)")
-                                }
-                            }
-                            if let fav = favoriteCount ?? post.favCount {
-                                HStack {
-                                    Text("Favs:")
-                                    Text("\(fav)")
-                                }
-                            }
-                            if let isFav = isFavorited {
-                                HStack {
-                                    Text("Favorited:")
-                                    Text(isFav ? "Yes" : "No")
-                                }
-                            }
-                            if let up = upScore ?? post.upScore {
-                                HStack {
-                                    Text("Up votes:")
-                                    Text("\(up)")
-                                }
-                            }
-                            if let down = downScore ?? post.downScore {
-                                HStack {
-                                    Text("Down votes:")
-                                    Text("\(down)")
-                                }
-                            }
-                            if let date = post.createdAt {
-                                HStack {
-                                    Text("Created:")
-                                    Text(date.formatted(date: .abbreviated, time: .shortened))
-                                }
-                            }
-                            if let src = post.source, let url = URL(string: src) {
-                                Link("Source", destination: url)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .font(.callout)
-                    .padding(8)
-                    .background(
-                        .regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    InfoCard(
+                        post: post,
+                        favoriteCount: favoriteCount ?? post.favCount,
+                        isFavorited: isFavorited,
+                        upScore: upScore ?? post.upScore,
+                        downScore: downScore ?? post.downScore
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
-                            .quinary, lineWidth: 1))
 
                     // Секции тегов: Artist / Copyright / Characters / General / Meta
-                    if !(post.tagsArtist.isEmpty && post.tagsCopyright.isEmpty
-                        && post.tagsCharacter.isEmpty && post.tagsGeneral.isEmpty
-                        && post.tagsMeta.isEmpty)
-                    {
-                        GroupBox("Tags") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                if !post.tagsArtist.isEmpty {
-                                    TagSection(
-                                        title: "Artist", color: .purple, tags: post.tagsArtist,
-                                        onOpenTag: { tag in openSearchInApp(tag) },
-                                        onCopyTag: { tag in copySingleTag(tag) }
-                                    )
-                                }
-                                if !post.tagsCopyright.isEmpty {
-                                    TagSection(
-                                        title: "Copyright", color: .teal, tags: post.tagsCopyright,
-                                        onOpenTag: { tag in openSearchInApp(tag) },
-                                        onCopyTag: { tag in copySingleTag(tag) }
-                                    )
-                                }
-                                if !post.tagsCharacter.isEmpty {
-                                    TagSection(
-                                        title: "Characters", color: .orange,
-                                        tags: post.tagsCharacter,
-                                        onOpenTag: { tag in openSearchInApp(tag) },
-                                        onCopyTag: { tag in copySingleTag(tag) }
-                                    )
-                                }
-                                if !post.tagsGeneral.isEmpty {
-                                    TagSection(
-                                        title: "General", color: .secondary, tags: post.tagsGeneral,
-                                        onOpenTag: { tag in openSearchInApp(tag) },
-                                        onCopyTag: { tag in copySingleTag(tag) }
-                                    )
-                                }
-                                if !post.tagsMeta.isEmpty {
-                                    TagSection(
-                                        title: "Meta", color: .pink, tags: post.tagsMeta,
-                                        onOpenTag: { tag in openSearchInApp(tag) },
-                                        onCopyTag: { tag in copySingleTag(tag) }
-                                    )
-                                }
-                            }
-                            .font(.callout)
-                        }
-                        .padding(8)
-                        .background(
-                            .regularMaterial,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
-                                .quinary, lineWidth: 1))
-                    } else {
-                        GroupBox("Tags") {
-                            if !post.allTags.isEmpty {
-                                TagFlowView(
-                                    tags: post.allTags,
-                                    onOpenTag: { tag in openSearchInApp(tag) },
-                                    onCopyTag: { tag in copySingleTag(tag) }
-                                )
-                            } else {
-                                Text("No tags").foregroundStyle(.secondary)
-                            }
-                        }
-                        .font(.callout)
-                        .padding(8)
-                        .background(
-                            .regularMaterial,
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
-                                .quinary, lineWidth: 1))
-                    }
-
-                    GroupBox("Comments") {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack {
-                                Text("Комментарии")
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                                Button {
-                                    Task { await refreshComments() }
-                                } label: {
-                                    Label("Обновить", systemImage: "arrow.clockwise")
-                                }
-                                .disabled(isLoadingComments)
-                            }
-
-                            if isLoadingComments {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                    Text("Loading comments…").foregroundStyle(.secondary)
-                                }
-                            } else if let error = commentsError {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text(error).foregroundStyle(.secondary)
-                                    Button {
-                                        Task { await refreshComments() }
-                                    } label: {
-                                        Label("Retry", systemImage: "arrow.clockwise")
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                }
-                            } else if comments.isEmpty {
-                                Text("No comments yet").foregroundStyle(.secondary)
-                            } else {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    ForEach(comments) { comment in
-                                        CommentRow(comment: comment)
-                                        if comment.id != comments.last?.id { Divider() }
-                                    }
-                                }
-                            }
-
-                            if hasMoreComments {
-                                if isLoadingMoreComments {
-                                    HStack {
-                                        Spacer()
-                                        ProgressView()
-                                        Spacer()
-                                    }
-                                } else {
-                                    Button {
-                                        Task { await loadMoreComments() }
-                                    } label: {
-                                        Label("Загрузить ещё", systemImage: "chevron.down")
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-                            }
-
-                            Divider().padding(.vertical, 4)
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Add Comment").font(.subheadline.weight(.semibold))
-                                TextEditor(text: $newComment)
-                                    .frame(minHeight: 80)
-                                    .scrollContentBackground(.hidden)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .strokeBorder(.quinary, lineWidth: 1)
-                                    )
-                                HStack {
-                                    Spacer()
-                                    Button {
-                                        Task { await submitComment() }
-                                    } label: {
-                                        if isSubmittingComment {
-                                            ProgressView().progressViewStyle(.circular)
-                                        } else {
-                                            Label("Post", systemImage: "paperplane")
-                                        }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .disabled(isSubmittingComment || newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                }
-                                Text("Requires Danbooru credentials in settings.")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(8)
-                    .background(
-                        .regularMaterial,
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    TagsCard(
+                        post: post,
+                        onOpenTag: { tag in openSearchInApp(tag) },
+                        onCopyTag: { tag in copySingleTag(tag) }
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(.quinary, lineWidth: 1)
+
+                    CommentsCard(
+                        comments: comments,
+                        isLoading: isLoadingComments,
+                        error: commentsError,
+                        hasMore: hasMoreComments,
+                        isLoadingMore: isLoadingMoreComments,
+                        newComment: $newComment,
+                        isSubmitting: isSubmittingComment,
+                        canSubmit: dependenciesStore.hasCredentials,
+                        onReload: { Task { await refreshComments() } },
+                        onLoadMore: { Task { await loadMoreComments() } },
+                        onSubmit: { Task { await submitComment() } }
                     )
                 }
                 .padding(.vertical)
@@ -575,17 +360,7 @@ struct PostDetailView: View {
             }
         }
         .padding()
-        .background(
-            LinearGradient(
-                colors: [
-                    Color("PrimaryBackground"),
-                    Color("SecondaryBackground").opacity(0.96),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
+        .background(Theme.Gradients.appBackground.ignoresSafeArea())
         .navigationTitle("Post #\(post.id)")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -1243,8 +1018,431 @@ private struct RatingBadge: View {
 }
 
 // MARK: - Flow layout for tags
+private struct ActionChip: View {
+    let title: String
+    let systemImage: String
+    var tint: Color
+    @State private var hovering = false
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.footnote.weight(.semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(tint.opacity(hovering ? 0.22 : 0.16))
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(tint.opacity(hovering ? 0.45 : 0.3), lineWidth: 1)
+            )
+            .foregroundStyle(tint)
+            .scaleEffect(hovering ? 1.02 : 1.0)
+            .animation(Theme.Animations.interactive, value: hovering)
+            .onHover { hovering = $0 }
+    }
+}
+
+private struct ActionsCard<Open: View, Copy: View, Interact: View, More: View>: View {
+    let openMenu: () -> Open
+    let copyMenu: () -> Copy
+    let interactMenu: () -> Interact
+    let moreMenu: () -> More
+    let onDownload: () -> Void
+    var downloadDisabled: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            openMenu()
+            copyMenu()
+            interactMenu()
+            moreMenu()
+            Spacer()
+            Button(action: onDownload) {
+                Label("Download", systemImage: "tray.and.arrow.down")
+                    .font(.callout.weight(.semibold))
+            }
+            .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
+            .disabled(downloadDisabled)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .glassCard(cornerRadius: 20, hoverElevates: false)
+    }
+}
+
+private struct InfoCard: View {
+    let post: Post
+    let favoriteCount: Int?
+    let isFavorited: Bool?
+    let upScore: Int?
+    let downScore: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("Информация", systemImage: "info.circle")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Theme.ColorPalette.textPrimary)
+                Spacer(minLength: 0)
+                if let rating = post.rating {
+                    RatingChip(rating: rating)
+                }
+            }
+
+            Divider().opacity(0.08)
+
+            VStack(alignment: .leading, spacing: 12) {
+                InfoRow(icon: "number", title: "ID", value: "#\(post.id)")
+
+                if let score = post.score {
+                    InfoRow(icon: "star.fill", title: "Score", value: "\(score)", tint: .yellow) {
+                        ScoreChip(score: score)
+                    }
+                }
+
+                if let fav = favoriteCount {
+                    InfoRow(icon: "heart.fill", title: "Favorites", value: "\(fav)", tint: .pink)
+                }
+
+                if let isFav = isFavorited {
+                    InfoRow(icon: "heart.circle.fill", title: "In favorites", value: isFav ? "Yes" : "No", tint: .pink)
+                }
+
+                if let up = upScore {
+                    InfoRow(icon: "hand.thumbsup.fill", title: "Upvotes", value: "\(up)", tint: .green)
+                }
+
+                if let down = downScore {
+                    InfoRow(icon: "hand.thumbsdown.fill", title: "Downvotes", value: "\(down)", tint: .orange)
+                }
+
+                if let width = post.width, let height = post.height {
+                    InfoRow(icon: "aspectratio", title: "Size", value: "\(width) × \(height)", tint: .cyan) {
+                        SizeBadge(width: width, height: height)
+                    }
+                }
+
+                if let date = post.createdAt {
+                    InfoRow(
+                        icon: "calendar",
+                        title: "Created",
+                        value: date.formatted(date: .abbreviated, time: .shortened),
+                        tint: .blue
+                    )
+                }
+            }
+
+            if let src = post.source, let url = URL(string: src) {
+                Divider().opacity(0.08)
+                Link(destination: url) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "link")
+                        Text("Open source")
+                            .font(.callout.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.ColorPalette.accent)
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .glassCard(cornerRadius: 20, hoverElevates: false)
+    }
+}
+
+private struct InfoRow<Accessory: View>: View {
+    let icon: String
+    let title: String
+    let value: String
+    var tint: Color
+    @ViewBuilder var accessory: () -> Accessory
+
+    init(
+        icon: String,
+        title: String,
+        value: String,
+        tint: Color = Theme.ColorPalette.accent,
+        @ViewBuilder accessory: @escaping () -> Accessory
+    ) {
+        self.icon = icon
+        self.title = title
+        self.value = value
+        self.tint = tint
+        self.accessory = accessory
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(tint.opacity(0.16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(tint.opacity(0.35), lineWidth: 1)
+                )
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(tint)
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.ColorPalette.textMuted)
+                Text(value)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Theme.ColorPalette.textPrimary)
+            }
+
+            Spacer(minLength: 0)
+
+            accessory()
+        }
+    }
+}
+
+extension InfoRow where Accessory == EmptyView {
+    init(icon: String, title: String, value: String, tint: Color = Theme.ColorPalette.accent) {
+        self.init(icon: icon, title: title, value: value, tint: tint) { EmptyView() }
+    }
+}
+
+private struct TagsCard: View {
+    let post: Post
+    var onOpenTag: (String) -> Void
+    var onCopyTag: (String) -> Void
+
+    private var hasCategorizedSections: Bool {
+        !(post.tagsArtist.isEmpty && post.tagsCopyright.isEmpty && post.tagsCharacter.isEmpty
+            && post.tagsGeneral.isEmpty && post.tagsMeta.isEmpty)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("Теги", systemImage: "tag")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Theme.ColorPalette.textPrimary)
+                Spacer(minLength: 0)
+                if !post.allTags.isEmpty {
+                    Text("\(post.allTags.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.ColorPalette.textMuted)
+                }
+            }
+
+            Divider().opacity(0.08)
+
+            if hasCategorizedSections {
+                VStack(alignment: .leading, spacing: 16) {
+                    if !post.tagsArtist.isEmpty {
+                        TagSection(
+                            title: "Artist",
+                            color: .purple,
+                            tags: post.tagsArtist,
+                            onOpenTag: onOpenTag,
+                            onCopyTag: onCopyTag
+                        )
+                    }
+                    if !post.tagsCopyright.isEmpty {
+                        TagSection(
+                            title: "Copyright",
+                            color: .teal,
+                            tags: post.tagsCopyright,
+                            onOpenTag: onOpenTag,
+                            onCopyTag: onCopyTag
+                        )
+                    }
+                    if !post.tagsCharacter.isEmpty {
+                        TagSection(
+                            title: "Characters",
+                            color: .orange,
+                            tags: post.tagsCharacter,
+                            onOpenTag: onOpenTag,
+                            onCopyTag: onCopyTag
+                        )
+                    }
+                    if !post.tagsGeneral.isEmpty {
+                        TagSection(
+                            title: "General",
+                            color: .secondary,
+                            tags: post.tagsGeneral,
+                            onOpenTag: onOpenTag,
+                            onCopyTag: onCopyTag
+                        )
+                    }
+                    if !post.tagsMeta.isEmpty {
+                        TagSection(
+                            title: "Meta",
+                            color: .pink,
+                            tags: post.tagsMeta,
+                            onOpenTag: onOpenTag,
+                            onCopyTag: onCopyTag
+                        )
+                    }
+                }
+            } else if !post.allTags.isEmpty {
+                TagFlowView(
+                    tags: post.allTags,
+                    tint: Theme.ColorPalette.accent,
+                    onOpenTag: { onOpenTag($0) },
+                    onCopyTag: { onCopyTag($0) }
+                )
+            } else {
+                Text("No tags")
+                    .font(.callout)
+                    .foregroundStyle(Theme.ColorPalette.textMuted)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .glassCard(cornerRadius: 20, hoverElevates: false)
+    }
+}
+
+private struct CommentsCard: View {
+    let comments: [Comment]
+    let isLoading: Bool
+    let error: String?
+    let hasMore: Bool
+    let isLoadingMore: Bool
+    @Binding var newComment: String
+    let isSubmitting: Bool
+    let canSubmit: Bool
+    let onReload: () -> Void
+    let onLoadMore: () -> Void
+    let onSubmit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("Комментарии", systemImage: "text.bubble")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Theme.ColorPalette.textPrimary)
+                Spacer(minLength: 0)
+                Theme.IconButton(
+                    systemName: "arrow.clockwise",
+                    isDisabled: isLoading,
+                    action: onReload
+                )
+            }
+
+            if isLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading comments…")
+                        .font(.callout)
+                        .foregroundStyle(Theme.ColorPalette.textMuted)
+                }
+            } else if let error {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(error)
+                        .font(.callout)
+                        .foregroundStyle(Theme.ColorPalette.textMuted)
+                    Button(action: onReload) {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
+                }
+            } else if comments.isEmpty {
+                Text("No comments yet")
+                    .font(.callout)
+                    .foregroundStyle(Theme.ColorPalette.textMuted)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(comments) { comment in
+                        CommentRow(comment: comment)
+                        if comment.id != comments.last?.id {
+                            Divider().opacity(0.1)
+                        }
+                    }
+                }
+            }
+
+            if hasMore {
+                if isLoadingMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                } else {
+                    Button(action: onLoadMore) {
+                        Label("Загрузить ещё", systemImage: "chevron.down")
+                            .font(.callout.weight(.semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
+                }
+            }
+
+            Divider().opacity(0.08)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Add Comment")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.ColorPalette.textPrimary)
+
+                TextEditor(text: $newComment)
+                    .frame(minHeight: 90)
+                    .scrollContentBackground(.hidden)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Theme.ColorPalette.controlBackground)
+                            .background(.ultraThinMaterial)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
+                    )
+
+                HStack {
+                    Spacer()
+                    Button(action: onSubmit) {
+                        if isSubmitting {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        } else {
+                            Label("Post", systemImage: "paperplane")
+                                .font(.callout.weight(.semibold))
+                        }
+                    }
+                    .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
+                    .disabled(
+                        isSubmitting
+                            || newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || !canSubmit
+                    )
+                }
+
+                Text(
+                    canSubmit ? "Не забудьте соблюдать правила сообщества." : "Для отправки комментариев добавьте креды Danbooru в настройках."
+                )
+                .font(.caption)
+                .foregroundStyle(Theme.ColorPalette.textMuted)
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .glassCard(cornerRadius: 20, hoverElevates: false)
+    }
+}
+
 private struct TagFlowView: View {
     let tags: [String]
+    var tint: Color
     var onOpenTag: ((String) -> Void)? = nil
     var onCopyTag: ((String) -> Void)? = nil
 
@@ -1256,6 +1454,7 @@ private struct TagFlowView: View {
                         TagChip(
                             tag: tag,
                             title: tag.replacingOccurrences(of: "_", with: " "),
+                            tint: tint,
                             onOpen: { onOpenTag?(tag) },
                             onCopy: { onCopyTag?(tag) }
                         )
@@ -1271,6 +1470,7 @@ private struct TagFlowView: View {
                         TagChip(
                             tag: tag,
                             title: tag.replacingOccurrences(of: "_", with: " "),
+                            tint: tint,
                             onOpen: { onOpenTag?(tag) },
                             onCopy: { onCopyTag?(tag) }
                         )
@@ -1284,39 +1484,47 @@ private struct TagFlowView: View {
 private struct TagChip: View {
     let tag: String
     let title: String
+    var tint: Color
     var onOpen: (() -> Void)?
     var onCopy: (() -> Void)?
 
     var body: some View {
         #if os(macOS)
             Button(action: { onOpen?() }) {
-                Text(title)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.thickMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(.quinary, lineWidth: 1))
+                chipContent
             }
             .buttonStyle(.plain)
             .help("Left click: search in app; Right click: copy tag")
-            // ПКМ ловим поверх, но пропускаем ЛКМ
             .overlay(
                 RightClickCatcher(onRightClick: { onCopy?() })
                     .allowsHitTesting(true)
             )
         #else
             Button(action: { onOpen?() }) {
-                Text(title)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.thickMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(.quinary, lineWidth: 1))
+                chipContent
             }
             .buttonStyle(.plain)
         #endif
+    }
+
+    private var chipContent: some View {
+        Text(title)
+            .font(.callout.weight(.medium))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                ZStack {
+                    Capsule(style: .continuous)
+                        .fill(tint.opacity(0.18))
+                    Capsule(style: .continuous)
+                        .fill(.ultraThinMaterial)
+                }
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(tint.opacity(0.45), lineWidth: 1)
+            )
+            .foregroundStyle(tint)
     }
 }
 
@@ -1425,39 +1633,55 @@ private struct CommentRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
-                .fill(.thinMaterial)
-                .frame(width: 34, height: 34)
+                .fill(Theme.ColorPalette.controlBackground.opacity(0.9))
                 .overlay(
                     Text(avatarInitial)
                         .font(.headline.weight(.semibold))
+                        .foregroundStyle(Theme.ColorPalette.textPrimary)
                 )
+                .frame(width: 36, height: 36)
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(authorName)
                         .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.ColorPalette.textPrimary)
                     if let creatorID = comment.creatorID {
                         Text("#\(creatorID)")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.ColorPalette.textMuted)
                     }
-                    Spacer()
+                    Spacer(minLength: 0)
                     if let date = comment.createdAt {
                         Text(date.formatted(date: .abbreviated, time: .shortened))
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.ColorPalette.textMuted)
                     }
                 }
                 if let attributed = renderedBody {
                     Text(attributed)
                         .font(.callout)
+                        .foregroundStyle(Theme.ColorPalette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text(comment.body)
                         .font(.callout)
+                        .foregroundStyle(Theme.ColorPalette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Theme.ColorPalette.controlBackground.opacity(0.95))
+                .background(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Theme.ColorPalette.glassBorder.opacity(0.6), lineWidth: 1)
+        )
     }
 
     private var authorName: String {
@@ -1498,24 +1722,46 @@ private struct TagSection: View {
     var onCopyTag: ((String) -> Void)? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Circle().fill(color.opacity(0.8)).frame(width: 6, height: 6)
-                Text(title).font(.headline).fontWeight(.semibold).foregroundStyle(.primary)
-                Spacer()
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(color.opacity(0.16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(color.opacity(0.4), lineWidth: 1)
+                    )
+                    .frame(width: 30, height: 30)
+                    .overlay(
+                        Image(systemName: "tag")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(color)
+                    )
+
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.ColorPalette.textPrimary)
+
+                Spacer(minLength: 0)
+
                 #if os(macOS)
-                    Button {
+                    Theme.IconButton(
+                        systemName: "doc.on.doc",
+                        size: 28,
+                        isDisabled: tags.isEmpty
+                    ) {
                         let pb = NSPasteboard.general
                         pb.clearContents()
                         pb.setString(tags.joined(separator: " "), forType: .string)
-                    } label: {
-                        Image(systemName: "doc.on.doc")
                     }
-                    .buttonStyle(.borderless)
                     .help("Copy section tags")
                 #endif
             }
-            TagFlowView(tags: tags, onOpenTag: onOpenTag, onCopyTag: onCopyTag)
+            TagFlowView(
+                tags: tags,
+                tint: color,
+                onOpenTag: onOpenTag,
+                onCopyTag: onCopyTag
+            )
         }
     }
 }
