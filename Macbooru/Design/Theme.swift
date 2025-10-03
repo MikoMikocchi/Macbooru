@@ -47,12 +47,27 @@ enum Theme {
     // MARK: - Gradients
     struct Gradients {
         static var appBackground: LinearGradient {
-            LinearGradient(
-                colors: [
+            appBackground(for: .light)
+        }
+
+        static func appBackground(for scheme: ColorScheme) -> LinearGradient {
+            let colors: [Color]
+            switch scheme {
+            case .dark:
+                colors = [
+                    ColorPalette.secondaryBackground.opacity(0.85),
+                    Color.black.opacity(0.55),
+                    ColorPalette.primaryBackground.opacity(0.75),
+                ]
+            default:
+                colors = [
                     ColorPalette.primaryBackground,
                     ColorPalette.secondaryBackground.opacity(0.9),
                     ColorPalette.primaryBackground.opacity(0.92),
-                ],
+                ]
+            }
+            return LinearGradient(
+                colors: colors,
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -107,10 +122,67 @@ enum Theme {
 
     // MARK: - Animations
     struct Animations {
-        static let interactive = Animation.spring(response: 0.32, dampingFraction: 0.74, blendDuration: 0.18)
-        static let hover = Animation.easeInOut(duration: 0.18)
-        static func stagger(index: Int, baseDelay: Double = 0.045) -> Animation {
-            interactive.delay(Double(index) * baseDelay)
+        struct SpringProfile {
+            let response: Double
+            let damping: Double
+            let blend: Double
+        }
+
+        enum SpringStyle {
+            case standard
+            case quick
+            case gentle
+        }
+
+        private static func profile(for style: SpringStyle) -> SpringProfile {
+            #if os(macOS)
+                switch style {
+                case .standard: return SpringProfile(response: 0.32, damping: 0.74, blend: 0.18)
+                case .quick: return SpringProfile(response: 0.26, damping: 0.70, blend: 0.14)
+                case .gentle: return SpringProfile(response: 0.38, damping: 0.82, blend: 0.22)
+                }
+            #else
+                switch style {
+                case .standard: return SpringProfile(response: 0.38, damping: 0.82, blend: 0.20)
+                case .quick: return SpringProfile(response: 0.30, damping: 0.78, blend: 0.16)
+                case .gentle: return SpringProfile(response: 0.45, damping: 0.9, blend: 0.24)
+                }
+            #endif
+        }
+
+        private static var hoverDuration: Double {
+            #if os(macOS)
+                return 0.18
+            #else
+                return 0.22
+            #endif
+        }
+
+        private static var defaultStagger: Double {
+            #if os(macOS)
+                return 0.045
+            #else
+                return 0.055
+            #endif
+        }
+
+        static func interactive(_ style: SpringStyle = .standard) -> Animation {
+            let profile = profile(for: style)
+            return Animation.spring(
+                response: profile.response,
+                dampingFraction: profile.damping,
+                blendDuration: profile.blend
+            )
+        }
+
+        static func hover(duration: Double? = nil) -> Animation {
+            Animation.easeInOut(duration: duration ?? hoverDuration)
+        }
+
+        static func stagger(index: Int, baseDelay: Double? = nil, style: SpringStyle = .standard)
+            -> Animation
+        {
+            interactive(style).delay(Double(index) * (baseDelay ?? defaultStagger))
         }
     }
 
@@ -170,15 +242,16 @@ enum Theme {
                     }
                 )
                 .shadow(
-                    color: Theme.ColorPalette.shadowSoft.opacity(isHover && hoverElevates ? 1 : 0.8),
+                    color: Theme.ColorPalette.shadowSoft.opacity(
+                        isHover && hoverElevates ? 1 : 0.8),
                     radius: isHover && hoverElevates ? 22 : 14,
                     x: 0,
                     y: isHover && hoverElevates ? 10 : 6
                 )
                 .scaleEffect(isHover && hoverElevates ? 1.015 : 1.0)
-                .animation(Animations.interactive, value: isHover)
+                .animation(Animations.interactive(), value: isHover)
                 .onHover { hovering in
-                    withAnimation(Animations.hover) {
+                    withAnimation(Animations.hover()) {
                         isHover = hovering
                     }
                 }
@@ -230,9 +303,9 @@ enum Theme {
                     x: 0,
                     y: hovering ? 10 : 4
                 )
-                .animation(Animations.interactive, value: hovering)
+                .animation(Animations.interactive(), value: hovering)
                 .onHover { value in
-                    withAnimation(Animations.hover) {
+                    withAnimation(Animations.hover()) {
                         hovering = value
                         hoverBinding?.wrappedValue = value
                     }
@@ -318,6 +391,9 @@ enum Theme {
         var tint: Color = ColorPalette.textPrimary
         var background: Color = ColorPalette.controlBackground
         var hoverBackground: Color = ColorPalette.controlHover
+        var showsBackground: Bool = true
+        var showsStroke: Bool = true
+        var usesMaterial: Bool = true
         var action: () -> Void
 
         @State private var hovering = false
@@ -337,22 +413,41 @@ enum Theme {
                 .frame(width: size, height: size)
                 .foregroundStyle(tint)
                 .background(
-                    RoundedRectangle(cornerRadius: Constants.compactCornerRadius, style: .continuous)
-                        .fill(hovering && !isDisabled ? hoverBackground : background)
-                        .background(.ultraThinMaterial)
+                    Group {
+                        if showsBackground {
+                            RoundedRectangle(
+                                cornerRadius: Constants.compactCornerRadius, style: .continuous
+                            )
+                            .fill(hovering && !isDisabled ? hoverBackground : background)
+                            .background(
+                                usesMaterial
+                                    ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear)
+                            )
+                        } else {
+                            Color.clear
+                        }
+                    }
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: Constants.compactCornerRadius, style: .continuous)
-                        .strokeBorder(ColorPalette.glassBorder.opacity(hovering && !isDisabled ? 0.8 : 0.5), lineWidth: 1)
+                    Group {
+                        if showsStroke {
+                            RoundedRectangle(
+                                cornerRadius: Constants.compactCornerRadius, style: .continuous
+                            )
+                            .strokeBorder(
+                                ColorPalette.glassBorder.opacity(
+                                    hovering && !isDisabled ? 0.8 : 0.5), lineWidth: 1)
+                        }
+                    }
                 )
                 .scaleEffect(hovering && !isDisabled ? 1.05 : 1.0)
             }
             .buttonStyle(.plain)
             .disabled(isDisabled || showsProgress)
             .opacity(isDisabled && !showsProgress ? 0.55 : 1.0)
-            .animation(Animations.interactive, value: hovering)
+            .animation(Animations.interactive(), value: hovering)
             .onHover { value in
-                withAnimation(Animations.hover) {
+                withAnimation(Animations.hover()) {
                     hovering = value
                 }
             }
@@ -372,40 +467,51 @@ enum Theme {
                 Text("\(number)")
                     .font(.system(size: 14, weight: isCurrent ? .bold : .semibold))
                     .frame(width: Constants.controlSize, height: Constants.controlSize)
-                    .foregroundStyle(isCurrent ? Theme.ColorPalette.textPrimary : Theme.ColorPalette.textSecondary)
+                    .foregroundStyle(
+                        isCurrent
+                            ? Theme.ColorPalette.textPrimary : Theme.ColorPalette.textSecondary
+                    )
                     .background(
                         Group {
                             if isCurrent {
-                                RoundedRectangle(cornerRadius: Constants.compactCornerRadius, style: .continuous)
-                                    .fill(ColorPalette.glassBase)
-                                    .background(.ultraThinMaterial)
+                                RoundedRectangle(
+                                    cornerRadius: Constants.compactCornerRadius, style: .continuous
+                                )
+                                .fill(ColorPalette.glassBase)
+                                .background(.ultraThinMaterial)
                             } else if hovering && !isDisabled {
-                                RoundedRectangle(cornerRadius: Constants.compactCornerRadius, style: .continuous)
-                                    .fill(ColorPalette.controlHover)
-                                    .background(.ultraThinMaterial)
+                                RoundedRectangle(
+                                    cornerRadius: Constants.compactCornerRadius, style: .continuous
+                                )
+                                .fill(ColorPalette.controlHover)
+                                .background(.ultraThinMaterial)
                             } else {
-                                RoundedRectangle(cornerRadius: Constants.compactCornerRadius, style: .continuous)
-                                    .fill(Color.clear)
+                                RoundedRectangle(
+                                    cornerRadius: Constants.compactCornerRadius, style: .continuous
+                                )
+                                .fill(Color.clear)
                             }
                         }
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: Constants.compactCornerRadius, style: .continuous)
-                            .strokeBorder(
-                                isCurrent
-                                    ? ColorPalette.glassHighlight
-                                    : ColorPalette.glassBorder.opacity(hovering ? 0.6 : 0.3),
-                                lineWidth: isCurrent ? 1.6 : 1
-                            )
+                        RoundedRectangle(
+                            cornerRadius: Constants.compactCornerRadius, style: .continuous
+                        )
+                        .strokeBorder(
+                            isCurrent
+                                ? ColorPalette.glassHighlight
+                                : ColorPalette.glassBorder.opacity(hovering ? 0.6 : 0.3),
+                            lineWidth: isCurrent ? 1.6 : 1
+                        )
                     )
                     .scaleEffect(hovering && !isDisabled ? 1.05 : 1.0)
             }
             .buttonStyle(.plain)
             .disabled(isDisabled)
             .opacity(isDisabled ? 0.45 : 1.0)
-            .animation(Animations.interactive, value: hovering)
+            .animation(Animations.interactive(), value: hovering)
             .onHover { value in
-                withAnimation(Animations.hover) {
+                withAnimation(Animations.hover()) {
                     hovering = value
                 }
             }
@@ -528,7 +634,7 @@ enum Theme {
                     y: 3
                 )
                 .scaleEffect(isPressed ? 0.97 : 1.0)
-                .animation(Animations.interactive, value: isPressed)
+                .animation(Animations.interactive(), value: isPressed)
         }
     }
 }

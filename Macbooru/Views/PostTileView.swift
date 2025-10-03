@@ -23,27 +23,27 @@ struct PostTileView: View {
                 animateUpgrades: false,
                 interpolation: search.lowPerformance ? .low : .medium,
                 decoratedBackground: false,
-                cornerRadius: cornerRadius
+                cornerRadius: 0
             )
             .blur(radius: blurRadius)
             .overlay(sensitiveOverlay)
             .onAppear {
-                withAnimation(Theme.Animations.hover.delay(0.05)) {
+                withAnimation(Theme.Animations.hover().delay(0.05)) {
                     imageLoaded = true
                 }
             }
 
             Theme.Gradients.modernOverlay(opacity: hover ? 0.7 : 0.52)
                 .allowsHitTesting(false)
-                .animation(Theme.Animations.hover, value: hover)
+                .animation(Theme.Animations.hover(), value: hover)
 
             infoRow
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .opacity(imageLoaded ? (hover ? 1.0 : 0.94) : 0)
                 .offset(y: imageLoaded ? 0 : 14)
-                .animation(Theme.Animations.hover, value: hover)
-                .animation(Theme.Animations.interactive.delay(0.12), value: imageLoaded)
+                .animation(Theme.Animations.hover(), value: hover)
+                .animation(Theme.Animations.interactive().delay(0.12), value: imageLoaded)
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay(
@@ -96,7 +96,9 @@ struct PostTileView: View {
 
     @ViewBuilder
     private var sensitiveOverlay: some View {
-        if search.blurSensitive, let rating = post.rating?.lowercased(), ["q", "e"].contains(rating) {
+        if search.blurSensitive, let rating = post.rating?.lowercased(),
+            ["q", "e"].contains(rating)
+        {
             VisualBlurOverlay(cornerRadius: cornerRadius)
         }
     }
@@ -126,7 +128,7 @@ struct PostTileView: View {
             .padding(12)
             .background(.ultraThinMaterial, in: Circle())
             .scaleEffect(hover ? 1.08 : 1.0)
-            .animation(Theme.Animations.interactive, value: hover)
+            .animation(Theme.Animations.interactive(), value: hover)
     }
 }
 

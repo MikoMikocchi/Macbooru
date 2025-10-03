@@ -20,10 +20,9 @@ struct SettingsView: View {
     @AppStorage("settings.showKeyboardHints") private var showKeyboardHints: Bool = true
     @AppStorage("settings.blurSensitiveDefault") private var blurSensitiveDefault: Bool = true
 
-    private let cardColumns = [
-        GridItem(.flexible(minimum: 320), spacing: 24),
-        GridItem(.flexible(minimum: 320), spacing: 24),
-    ]
+    private var cardColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 320, maximum: 520), spacing: 24)]
+    }
 
     enum StatusMessage: Equatable {
         case success(String)
@@ -392,9 +391,13 @@ private struct StatusBanner: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(tint.opacity(0.12))
-                .background(.ultraThinMaterial)
+            // Клипуем материал формой, чтобы не было "квадратной" подложки
+            tint.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -428,6 +431,7 @@ private struct ToggleRow: View {
         }
         .toggleStyle(SwitchToggleStyle(tint: Theme.ColorPalette.accent))
         .padding(.vertical, 4)
+        .accessibilityHint(Text(subtitle ?? ""))
     }
 
     private var icon: some View {
@@ -473,18 +477,32 @@ private struct RowBase<Accessory: View>: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Theme.ColorPalette.controlBackground.opacity(hovering ? 1.0 : 0.85))
-                .background(.ultraThinMaterial)
+            Theme.ColorPalette.controlBackground.opacity(hovering ? 1.0 : 0.85),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .background(
+            .ultraThinMaterial,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Theme.ColorPalette.glassBorder.opacity(hovering ? 0.7 : 0.45), lineWidth: 1)
+                .strokeBorder(
+                    Theme.ColorPalette.glassBorder.opacity(hovering ? 0.7 : 0.45), lineWidth: 1)
         )
         .scaleEffect(hovering ? 1.02 : 1.0)
-        .shadow(color: Theme.ColorPalette.shadowSoft.opacity(0.45), radius: hovering ? 9 : 6, x: 0, y: hovering ? 4 : 2)
-        .animation(Theme.Animations.interactive, value: hovering)
-        .onHover { hovering = $0 }
+        .shadow(
+            color: Theme.ColorPalette.shadowSoft.opacity(0.45), radius: hovering ? 9 : 6, x: 0,
+            y: hovering ? 4 : 2
+        )
+        .animation(Theme.Animations.interactive(), value: hovering)
+        .onHover { value in
+            withAnimation(Theme.Animations.hover()) {
+                hovering = value
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(title))
+        .accessibilityHint(Text(subtitle ?? ""))
     }
 
     private var icon: some View {
@@ -576,6 +594,7 @@ private struct AccountSummaryView: View {
 }
 
 private struct SettingsCard<Header: View, Content: View>: View {
+    @Environment(\.sizeCategory) private var sizeCategory
     var header: () -> Header
     var content: () -> Content
     var minHeight: CGFloat
@@ -596,8 +615,18 @@ private struct SettingsCard<Header: View, Content: View>: View {
             content()
         }
         .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
-        .padding(Theme.Constants.cardPadding)
+        .padding(.horizontal, horizontalPadding)
+        .padding(.vertical, verticalPadding)
         .glassCard(cornerRadius: 20, hoverElevates: false)
+    }
+
+    private var horizontalPadding: CGFloat {
+        sizeCategory.isAccessibilityCategory
+            ? Theme.Constants.cardPadding + 6 : Theme.Constants.cardPadding
+    }
+
+    private var verticalPadding: CGFloat {
+        max(16, horizontalPadding - 6)
     }
 }
 

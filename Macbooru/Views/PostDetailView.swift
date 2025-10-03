@@ -13,6 +13,7 @@ struct PostDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appDependencies) private var dependencies
     @EnvironmentObject private var dependenciesStore: AppDependenciesStore
+    @Environment(\.colorScheme) private var colorScheme
 
     // Зум и панорамирование
     @State private var zoom: CGFloat = 1.0
@@ -35,6 +36,7 @@ struct PostDetailView: View {
     @State private var commentsPage: Int = 1
     @State private var hasMoreComments: Bool = true
     @State private var isLoadingMoreComments: Bool = false
+    @State private var isDownloading = false
 
     private let commentsPageSize = 40
 
@@ -45,7 +47,8 @@ struct PostDetailView: View {
     }
     private var pageURL: URL { URL(string: "https://danbooru.donmai.us/posts/\(post.id)")! }
 
-    private var openMenu: some View {
+    @ViewBuilder
+    private func openMenu(state: ActionChip.ChipState = .normal) -> some View {
         Menu {
             Button("Open post page", systemImage: "link") {
                 #if os(macOS)
@@ -74,12 +77,19 @@ struct PostDetailView: View {
                 }
             }
         } label: {
-            ActionChip(title: "Open", systemImage: "safari", tint: .cyan)
+            ActionChip(
+                title: "Open",
+                systemImage: "safari",
+                tint: .cyan,
+                state: state,
+                accessibilityHint: "Open the post links in browser"
+            )
         }
         .menuStyle(.borderlessButton)
     }
 
-    private var copyMenu: some View {
+    @ViewBuilder
+    private func copyMenu(state: ActionChip.ChipState = .normal) -> some View {
         Menu {
             Button("Copy post URL", systemImage: "link") { copyPostURL() }
             if post.fileURL != nil || post.largeURL != nil {
@@ -102,12 +112,19 @@ struct PostDetailView: View {
                 copyTagsToPasteboard()
             }
         } label: {
-            ActionChip(title: "Copy", systemImage: "doc.on.doc", tint: .mint)
+            ActionChip(
+                title: "Copy",
+                systemImage: "doc.on.doc",
+                tint: .mint,
+                state: state,
+                accessibilityHint: "Copy useful links for the post"
+            )
         }
         .menuStyle(.borderlessButton)
     }
 
-    private var interactMenu: some View {
+    @ViewBuilder
+    private func interactMenu(state: ActionChip.ChipState) -> some View {
         Menu {
             Button {
                 Task { await performFavorite(add: !currentFavoriteState) }
@@ -143,10 +160,16 @@ struct PostDetailView: View {
                     || lastVoteScore == -1
             )
         } label: {
-            ActionChip(title: "Interact", systemImage: "hand.tap", tint: .pink)
+            ActionChip(
+                title: "Interact",
+                systemImage: "hand.tap",
+                tint: .pink,
+                state: state,
+                accessibilityHint: "Favorite or vote on the post"
+            )
         }
         .menuStyle(.borderlessButton)
-        .disabled(!dependenciesStore.hasCredentials)
+        .disabled(!dependenciesStore.hasCredentials || state == .loading)
         .help(
             dependenciesStore.hasCredentials
                 ? "Избранное и голосование"
@@ -154,213 +177,287 @@ struct PostDetailView: View {
         )
     }
 
-    private var moreMenu: some View {
+    @ViewBuilder
+    private func moreMenu(state: ActionChip.ChipState = .normal) -> some View {
         Menu {
             Button("Reveal Downloads Folder", systemImage: "folder") {
                 revealDownloadsFolder()
             }
         } label: {
-            ActionChip(title: "More", systemImage: "ellipsis.circle", tint: Theme.ColorPalette.textMuted)
+            ActionChip(
+                title: "More",
+                systemImage: "ellipsis.circle",
+                tint: Theme.ColorPalette.textMuted,
+                state: state,
+                accessibilityHint: "Reveal the Macbooru downloads folder"
+            )
         }
         .menuStyle(.borderlessButton)
     }
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 24) {
-            // Левая колонка — изображение + действия
-            VStack(alignment: .leading, spacing: 20) {
-                ZStack(alignment: .topTrailing) {
-                    GeometryReader { proxy in
-                        let h = max(420.0, proxy.size.height)
-                        RemoteImage(
-                            candidates: bestImageCandidates,
-                            height: h,
-                            contentMode: ContentMode.fit,
-                            animateFirstAppearance: true,
-                            animateUpgrades: true,
-                            decoratedBackground: false,
-                            cornerRadius: imageCornerRadius
+    private var interactChipState: ActionChip.ChipState {
+        if !dependenciesStore.hasCredentials { return .disabled }
+        if isInteractionInProgress { return .loading }
+        return .normal
+    }
+
+    @ViewBuilder
+    private func imageSection(isCompact: Bool, maxHeight: CGFloat) -> some View {
+        let stackSpacing: CGFloat = isCompact ? 16 : 20
+        let cardPadding: CGFloat = isCompact ? 14 : 18
+
+        VStack(alignment: .leading, spacing: stackSpacing) {
+            ZStack(alignment: .topTrailing) {
+                GeometryReader { proxy in
+                    // Высота зоны просмотра арта ограничена, чтобы всё умещалось на одном экране
+                    let h = max(420.0, min(proxy.size.height, maxHeight))
+                    RemoteImage(
+                        candidates: bestImageCandidates,
+                        height: h,
+                        contentMode: ContentMode.fit,
+                        animateFirstAppearance: true,
+                        animateUpgrades: true,
+                        decoratedBackground: false,
+                        cornerRadius: 0
+                    )
+                    .scaleEffect(zoom)
+                    .offset(offset)
+                    .onChange(of: zoom) { _, _ in
+                        offset = clampedOffset(
+                            offset,
+                            containerSize: proxy.size,
+                            contentBaseHeight: h
                         )
-                        .scaleEffect(zoom)
-                        .offset(offset)
-                        .onChange(of: zoom) { _, _ in
-                            // При изменении зума (в т.ч. кнопками) удерживаем изображение в пределах рамки
-                            offset = clampedOffset(
-                                offset, containerSize: proxy.size, contentBaseHeight: h)
-                        }
-                        #if os(macOS)
-                            // macOS: захватываем жесты трекпада через AppKit-представление поверх
-                            .overlay(
-                                PanZoomProxy(
-                                    onPan: { delta in
-                                        // Панорамирование с ограничением в рамках области просмотра
-                                        let candidate = CGSize(
-                                            width: offset.width + delta.width,
-                                            height: offset.height + delta.height
-                                        )
-                                        offset = softClampedOffset(
-                                            candidate, containerSize: proxy.size,
-                                            contentBaseHeight: h)
-                                        lastDrag = offset
-                                    },
-                                    onPanEnd: {
-                                        withAnimation(.easeOut(duration: 0.15)) {
-                                            offset = hardClampedOffset(
-                                                offset, containerSize: proxy.size,
-                                                contentBaseHeight: h)
-                                        }
-                                        lastDrag = offset
-                                    },
-                                    onMagnify: { scale, location in
-                                        let old = zoom
-                                        let next = min(6.0, max(0.5, old * scale))
-                                        // удерживаем фокус: корректируем offset так, чтобы точка под курсором оставалась на месте
-                                        if old != 0, next != old {
-                                            let f = next / old
-                                            let center = CGPoint(
-                                                x: proxy.size.width / 2,
-                                                y: proxy.size.height / 2
-                                            )
-                                            let dx = (location.x - center.x) * (f - 1)
-                                            let dy = (location.y - center.y) * (f - 1)
-                                            offset = CGSize(
-                                                width: offset.width - dx,
-                                                height: offset.height - dy
-                                            )
-                                        }
-                                        zoom = next
-                                        lastZoom = next
-                                        // после изменения зума — подправим оффсет к жёстким пределам
+                    }
+                    #if os(macOS)
+                        .overlay(
+                            PanZoomProxy(
+                                onPan: { delta in
+                                    let candidate = CGSize(
+                                        width: offset.width + delta.width,
+                                        height: offset.height + delta.height
+                                    )
+                                    offset = softClampedOffset(
+                                        candidate,
+                                        containerSize: proxy.size,
+                                        contentBaseHeight: h
+                                    )
+                                    lastDrag = offset
+                                },
+                                onPanEnd: {
+                                    withAnimation(.easeOut(duration: 0.15)) {
                                         offset = hardClampedOffset(
-                                            offset, containerSize: proxy.size,
-                                            contentBaseHeight: h)
-                                    },
-                                    onDoubleClick: { _ in
-                                        // Fit по двойному клику
-                                        resetZoom()
-                                    },
-                                    buildContextMenu: { makeArtContextMenu() }
-                                )
-                            )
-                        #else
-                            // iOS: стандартные жесты SwiftUI
-                            .gesture(
-                                MagnificationGesture()
-                                    .onChanged { value in
-                                        zoom = min(6.0, max(0.5, lastZoom * value))
-                                    }
-                                    .onEnded { _ in
-                                        lastZoom = zoom
-                                    }
-                            )
-                            .simultaneousGesture(
-                                DragGesture()
-                                    .onChanged { g in
-                                        let candidate = CGSize(
-                                            width: lastDrag.width + g.translation.width,
-                                            height: lastDrag.height + g.translation.height
+                                            offset,
+                                            containerSize: proxy.size,
+                                            contentBaseHeight: h
                                         )
-                                        offset = softClampedOffset(
-                                            candidate, containerSize: proxy.size,
-                                            contentBaseHeight: h)
                                     }
-                                    .onEnded { _ in
-                                        withAnimation(.easeOut(duration: 0.15)) {
-                                            offset = hardClampedOffset(
-                                                offset, containerSize: proxy.size,
-                                                contentBaseHeight: h)
-                                        }
-                                        lastDrag = offset
+                                    lastDrag = offset
+                                },
+                                onMagnify: { scale, location in
+                                    let old = zoom
+                                    let next = min(6.0, max(0.5, old * scale))
+                                    if old != 0, next != old {
+                                        let factor = next / old
+                                        let center = CGPoint(
+                                            x: proxy.size.width / 2,
+                                            y: proxy.size.height / 2
+                                        )
+                                        let dx = (location.x - center.x) * (factor - 1)
+                                        let dy = (location.y - center.y) * (factor - 1)
+                                        offset = CGSize(
+                                            width: offset.width - dx,
+                                            height: offset.height - dy
+                                        )
                                     }
+                                    zoom = next
+                                    lastZoom = next
+                                    offset = hardClampedOffset(
+                                        offset,
+                                        containerSize: proxy.size,
+                                        contentBaseHeight: h
+                                    )
+                                },
+                                onDoubleClick: { _ in
+                                    resetZoom()
+                                },
+                                buildContextMenu: { makeArtContextMenu() }
                             )
-                        #endif
-                        .animation(Animation.easeInOut(duration: 0.15), value: zoom)
-                    }
-                    .frame(minHeight: 460)
-
-                    // Плавающие контролы зума
-                    HStack(spacing: 10) {
-                        Theme.IconButton(
-                            systemName: "arrow.down.right.and.arrow.up.left",
-                            action: resetZoom
                         )
-                        .help("Сбросить зум и позицию")
-
-                        Theme.IconButton(
-                            systemName: "minus.magnifyingglass",
-                            action: { stepZoom(in: -1) }
+                    #else
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    zoom = min(6.0, max(0.5, lastZoom * value))
+                                }
+                                .onEnded { _ in
+                                    lastZoom = zoom
+                                }
                         )
-
-                        Theme.IconButton(
-                            systemName: "plus.magnifyingglass",
-                            action: { stepZoom(in: +1) }
+                        .simultaneousGesture(
+                            DragGesture()
+                                .onChanged { g in
+                                    let candidate = CGSize(
+                                        width: lastDrag.width + g.translation.width,
+                                        height: lastDrag.height + g.translation.height
+                                    )
+                                    offset = softClampedOffset(
+                                        candidate,
+                                        containerSize: proxy.size,
+                                        contentBaseHeight: h
+                                    )
+                                }
+                                .onEnded { _ in
+                                    withAnimation(.easeOut(duration: 0.15)) {
+                                        offset = hardClampedOffset(
+                                            offset,
+                                            containerSize: proxy.size,
+                                            contentBaseHeight: h
+                                        )
+                                    }
+                                    lastDrag = offset
+                                }
                         )
-                    }
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Theme.ColorPalette.controlBackground)
-                            .background(.ultraThinMaterial)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
-                    )
-                    .padding(12)
+                    #endif
+                    .animation(.easeInOut(duration: 0.15), value: zoom)
                 }
+                .frame(height: max(460, maxHeight))
 
-                .padding(18)
-                .glassCard(cornerRadius: imageCornerRadius, hoverElevates: false)
+                HStack(spacing: 12) {
+                    // Fit to screen
+                    Theme.IconButton(
+                        systemName: "arrow.down.right.and.arrow.up.left",
+                        size: Theme.Constants.controlSize + 6,
+                        tint: .white,
+                        showsBackground: true,
+                        showsStroke: true,
+                        usesMaterial: false,
+                        action: resetZoom
+                    )
+                    .help("Сбросить зум и позицию")
 
-                ActionsCard(
-                    openMenu: { openMenu },
-                    copyMenu: { copyMenu },
-                    interactMenu: { interactMenu },
-                    moreMenu: { moreMenu },
-                    onDownload: { Task { await downloadBestImage() } },
-                    downloadDisabled: bestImageCandidates.isEmpty
+                    // Zoom out / in with disabled states at bounds
+                    Theme.IconButton(
+                        systemName: "minus.magnifyingglass",
+                        size: Theme.Constants.controlSize + 6,
+                        isDisabled: zoom <= 0.51,
+                        tint: .white,
+                        showsBackground: true,
+                        showsStroke: true,
+                        usesMaterial: false,
+                        action: { stepZoom(in: -1) }
+                    )
+
+                    Theme.IconButton(
+                        systemName: "plus.magnifyingglass",
+                        size: Theme.Constants.controlSize + 6,
+                        isDisabled: zoom >= 5.99,
+                        tint: .white,
+                        showsBackground: true,
+                        showsStroke: true,
+                        usesMaterial: false,
+                        action: { stepZoom(in: +1) }
+                    )
+                }
+                .padding(10)
+                // Материал и подложка теперь строго внутри закруглённой формы —
+                // устраняем «квадратную» подложку позади панели
+                .background(
+                    Theme.ColorPalette.controlBackground,
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
                 )
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
+                )
+                .padding(10)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(cardPadding)
+            .glassCard(cornerRadius: imageCornerRadius, hoverElevates: false)
 
-            // Правая колонка — Info и Tags
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    InfoCard(
-                        post: post,
-                        favoriteCount: favoriteCount ?? post.favCount,
-                        isFavorited: isFavorited,
-                        upScore: upScore ?? post.upScore,
-                        downScore: downScore ?? post.downScore
-                    )
-
-                    // Секции тегов: Artist / Copyright / Characters / General / Meta
-                    TagsCard(
-                        post: post,
-                        onOpenTag: { tag in openSearchInApp(tag) },
-                        onCopyTag: { tag in copySingleTag(tag) }
-                    )
-
-                    CommentsCard(
-                        comments: comments,
-                        isLoading: isLoadingComments,
-                        error: commentsError,
-                        hasMore: hasMoreComments,
-                        isLoadingMore: isLoadingMoreComments,
-                        newComment: $newComment,
-                        isSubmitting: isSubmittingComment,
-                        canSubmit: dependenciesStore.hasCredentials,
-                        onReload: { Task { await refreshComments() } },
-                        onLoadMore: { Task { await loadMoreComments() } },
-                        onSubmit: { Task { await submitComment() } }
-                    )
-                }
-                .padding(.vertical)
-                .frame(maxWidth: 320)
-            }
+            ActionsCard(
+                openMenu: { openMenu() },
+                copyMenu: { copyMenu() },
+                interactMenu: { interactMenu(state: interactChipState) },
+                moreMenu: { moreMenu() },
+                onDownload: { Task { await downloadBestImage() } },
+                downloadDisabled: bestImageCandidates.isEmpty,
+                isDownloading: isDownloading
+            )
         }
-        .padding()
-        .background(Theme.Gradients.appBackground.ignoresSafeArea())
+    }
+
+    @ViewBuilder
+    private func infoSection(isCompact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            InfoCard(
+                post: post,
+                favoriteCount: favoriteCount ?? post.favCount,
+                isFavorited: isFavorited,
+                upScore: upScore ?? post.upScore,
+                downScore: downScore ?? post.downScore
+            )
+
+            TagsCard(
+                post: post,
+                onOpenTag: { tag in openSearchInApp(tag) },
+                onCopyTag: { tag in copySingleTag(tag) }
+            )
+
+            CommentsCard(
+                comments: comments,
+                isLoading: isLoadingComments,
+                error: commentsError,
+                hasMore: hasMoreComments,
+                isLoadingMore: isLoadingMoreComments,
+                newComment: $newComment,
+                isSubmitting: isSubmittingComment,
+                canSubmit: dependenciesStore.hasCredentials,
+                onReload: { Task { await refreshComments() } },
+                onLoadMore: { Task { await loadMoreComments() } },
+                onSubmit: { Task { await submitComment() } }
+            )
+        }
+        .padding(.vertical, isCompact ? 0 : 4)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let isCompact = proxy.size.width < 900
+            // Ещё немного уменьшаем резерв, чтобы подтянуть интерфейс к нижней границе окна
+            let reserved: CGFloat = isCompact ? 160 : 180
+            let imageMaxHeight = max(420, proxy.size.height - reserved)
+            ScrollView(showsIndicators: false) {
+                Group {
+                    if isCompact {
+                        VStack(alignment: .leading, spacing: 24) {
+                            imageSection(isCompact: true, maxHeight: imageMaxHeight)
+                            infoSection(isCompact: true)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                    } else {
+                        HStack(alignment: .top, spacing: 24) {
+                            imageSection(isCompact: false, maxHeight: imageMaxHeight)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                            infoSection(isCompact: false)
+                                .frame(maxWidth: 360, alignment: .topLeading)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(
+                isCompact
+                    ? EdgeInsets(top: 16, leading: 16, bottom: 4, trailing: 16)
+                    : EdgeInsets(top: 24, leading: 24, bottom: 4, trailing: 24)
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Theme.Gradients.appBackground(for: colorScheme).ignoresSafeArea())
+        }
         .navigationTitle("Post #\(post.id)")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -368,8 +465,14 @@ struct PostDetailView: View {
                     .help("Copy tags")
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                 Button(action: { Task { await downloadBestImage() } }) {
-                    Image(systemName: "tray.and.arrow.down")
+                    if isDownloading {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "tray.and.arrow.down")
+                    }
                 }
+                .disabled(isDownloading || bestImageCandidates.isEmpty)
                 .help("Download best image")
             }
         }
@@ -695,7 +798,10 @@ struct PostDetailView: View {
 
     @MainActor
     private func downloadBestImage() async {
+        guard !isDownloading else { return }
         guard let url = bestImageCandidates.first else { return }
+        isDownloading = true
+        defer { isDownloading = false }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             let fm = FileManager.default
@@ -801,6 +907,90 @@ struct PostDetailView: View {
 
     // MARK: - Контекстное меню по арту (macOS)
     #if os(macOS)
+        private struct PanZoomProxy: NSViewRepresentable {
+            typealias NSViewType = PanZoomNSView
+            var onPan: (CGSize) -> Void
+            var onPanEnd: (() -> Void)? = nil
+            var onMagnify: (CGFloat, CGPoint) -> Void
+            var onDoubleClick: ((CGPoint) -> Void)? = nil
+            var buildContextMenu: (() -> NSMenu)? = nil
+
+            func makeNSView(context: Context) -> PanZoomNSView {
+                let view = PanZoomNSView()
+                view.onPan = onPan
+                view.onPanEnd = onPanEnd
+                view.onMagnify = onMagnify
+                view.onDoubleClick = onDoubleClick
+                view.buildContextMenu = buildContextMenu
+                view.wantsLayer = true
+                view.layer?.backgroundColor = NSColor.clear.cgColor
+                return view
+            }
+
+            func updateNSView(_ nsView: PanZoomNSView, context: Context) {
+                nsView.onPan = onPan
+                nsView.onPanEnd = onPanEnd
+                nsView.onMagnify = onMagnify
+                nsView.onDoubleClick = onDoubleClick
+                nsView.buildContextMenu = buildContextMenu
+            }
+        }
+
+        private final class PanZoomNSView: NSView {
+            var onPan: ((CGSize) -> Void)?
+            var onPanEnd: (() -> Void)?
+            var onMagnify: ((CGFloat, CGPoint) -> Void)?
+            var onDoubleClick: ((CGPoint) -> Void)?
+            var buildContextMenu: (() -> NSMenu)?
+
+            private var lastMousePoint: NSPoint?
+
+            override var acceptsFirstResponder: Bool { true }
+
+            override func scrollWheel(with event: NSEvent) {
+                onPan?(CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY))
+                if event.phase == .ended || event.momentumPhase == .ended {
+                    onPanEnd?()
+                }
+            }
+
+            override func magnify(with event: NSEvent) {
+                let scale = 1 + event.magnification
+                let location = convert(event.locationInWindow, from: nil)
+                onMagnify?(scale, location)
+            }
+
+            override func mouseDown(with event: NSEvent) {
+                let point = convert(event.locationInWindow, from: nil)
+                if event.clickCount == 2 {
+                    onDoubleClick?(point)
+                    return
+                }
+                lastMousePoint = point
+            }
+
+            override func mouseDragged(with event: NSEvent) {
+                let point = convert(event.locationInWindow, from: nil)
+                if let last = lastMousePoint {
+                    onPan?(CGSize(width: point.x - last.x, height: point.y - last.y))
+                }
+                lastMousePoint = point
+            }
+
+            override func mouseUp(with event: NSEvent) {
+                lastMousePoint = nil
+                onPanEnd?()
+            }
+
+            override func rightMouseDown(with event: NSEvent) {
+                if let menu = buildContextMenu?() {
+                    NSMenu.popUpContextMenu(menu, with: event, for: self)
+                } else {
+                    super.rightMouseDown(with: event)
+                }
+            }
+        }
+
         private func makeArtContextMenu() -> NSMenu {
             let menu = NSMenu()
 
@@ -974,884 +1164,3 @@ struct PostDetailView: View {
         }
     #endif
 }
-
-// Контрастный ярлык для Menu-кнопок, чтобы они выглядели как prominent-кнопки
-private struct ProminentMenuLabel: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .foregroundStyle(Color.white)
-            .background(
-                RoundedRectangle(cornerRadius: 100, style: .continuous)
-                    .fill(Color.accentColor)
-            )
-            .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
-    }
-}
-
-extension View {
-    fileprivate func prominentMenuLabel() -> some View { self.modifier(ProminentMenuLabel()) }
-    @ViewBuilder
-    fileprivate func hideMenuIndicatorIfAvailable() -> some View {
-        if #available(macOS 14.0, iOS 17.0, *) {
-            self.menuIndicator(.hidden)
-        } else {
-            self
-        }
-    }
-}
-
-// MARK: - Rating badge
-private struct RatingBadge: View {
-    let rating: String
-    var body: some View {
-        let r = rating.lowercased()
-        let color: Color = (r == "g") ? .green : (r == "s") ? .blue : (r == "q") ? .orange : .red
-        Text(r.uppercased())
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(color.opacity(0.15), in: Capsule())
-            .overlay(Capsule().stroke(color.opacity(0.6), lineWidth: 1))
-    }
-}
-
-// MARK: - Flow layout for tags
-private struct ActionChip: View {
-    let title: String
-    let systemImage: String
-    var tint: Color
-    @State private var hovering = false
-
-    var body: some View {
-        Label(title, systemImage: systemImage)
-            .font(.footnote.weight(.semibold))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(tint.opacity(hovering ? 0.22 : 0.16))
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(tint.opacity(hovering ? 0.45 : 0.3), lineWidth: 1)
-            )
-            .foregroundStyle(tint)
-            .scaleEffect(hovering ? 1.02 : 1.0)
-            .animation(Theme.Animations.interactive, value: hovering)
-            .onHover { hovering = $0 }
-    }
-}
-
-private struct ActionsCard<Open: View, Copy: View, Interact: View, More: View>: View {
-    let openMenu: () -> Open
-    let copyMenu: () -> Copy
-    let interactMenu: () -> Interact
-    let moreMenu: () -> More
-    let onDownload: () -> Void
-    var downloadDisabled: Bool
-
-    var body: some View {
-        HStack(spacing: 12) {
-            openMenu()
-            copyMenu()
-            interactMenu()
-            moreMenu()
-            Spacer()
-            Button(action: onDownload) {
-                Label("Download", systemImage: "tray.and.arrow.down")
-                    .font(.callout.weight(.semibold))
-            }
-            .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
-            .disabled(downloadDisabled)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .glassCard(cornerRadius: 20, hoverElevates: false)
-    }
-}
-
-private struct InfoCard: View {
-    let post: Post
-    let favoriteCount: Int?
-    let isFavorited: Bool?
-    let upScore: Int?
-    let downScore: Int?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Label("Информация", systemImage: "info.circle")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Theme.ColorPalette.textPrimary)
-                Spacer(minLength: 0)
-                if let rating = post.rating {
-                    RatingChip(rating: rating)
-                }
-            }
-
-            Divider().opacity(0.08)
-
-            VStack(alignment: .leading, spacing: 12) {
-                InfoRow(icon: "number", title: "ID", value: "#\(post.id)")
-
-                if let score = post.score {
-                    InfoRow(icon: "star.fill", title: "Score", value: "\(score)", tint: .yellow) {
-                        ScoreChip(score: score)
-                    }
-                }
-
-                if let fav = favoriteCount {
-                    InfoRow(icon: "heart.fill", title: "Favorites", value: "\(fav)", tint: .pink)
-                }
-
-                if let isFav = isFavorited {
-                    InfoRow(icon: "heart.circle.fill", title: "In favorites", value: isFav ? "Yes" : "No", tint: .pink)
-                }
-
-                if let up = upScore {
-                    InfoRow(icon: "hand.thumbsup.fill", title: "Upvotes", value: "\(up)", tint: .green)
-                }
-
-                if let down = downScore {
-                    InfoRow(icon: "hand.thumbsdown.fill", title: "Downvotes", value: "\(down)", tint: .orange)
-                }
-
-                if let width = post.width, let height = post.height {
-                    InfoRow(icon: "aspectratio", title: "Size", value: "\(width) × \(height)", tint: .cyan) {
-                        SizeBadge(width: width, height: height)
-                    }
-                }
-
-                if let date = post.createdAt {
-                    InfoRow(
-                        icon: "calendar",
-                        title: "Created",
-                        value: date.formatted(date: .abbreviated, time: .shortened),
-                        tint: .blue
-                    )
-                }
-            }
-
-            if let src = post.source, let url = URL(string: src) {
-                Divider().opacity(0.08)
-                Link(destination: url) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "link")
-                        Text("Open source")
-                            .font(.callout.weight(.semibold))
-                        Spacer(minLength: 0)
-                        Image(systemName: "arrow.up.right")
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundStyle(Theme.ColorPalette.accent)
-                }
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .glassCard(cornerRadius: 20, hoverElevates: false)
-    }
-}
-
-private struct InfoRow<Accessory: View>: View {
-    let icon: String
-    let title: String
-    let value: String
-    var tint: Color
-    @ViewBuilder var accessory: () -> Accessory
-
-    init(
-        icon: String,
-        title: String,
-        value: String,
-        tint: Color = Theme.ColorPalette.accent,
-        @ViewBuilder accessory: @escaping () -> Accessory
-    ) {
-        self.icon = icon
-        self.title = title
-        self.value = value
-        self.tint = tint
-        self.accessory = accessory
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(tint.opacity(0.16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(tint.opacity(0.35), lineWidth: 1)
-                )
-                .frame(width: 34, height: 34)
-                .overlay(
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(tint)
-                )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.ColorPalette.textMuted)
-                Text(value)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(Theme.ColorPalette.textPrimary)
-            }
-
-            Spacer(minLength: 0)
-
-            accessory()
-        }
-    }
-}
-
-extension InfoRow where Accessory == EmptyView {
-    init(icon: String, title: String, value: String, tint: Color = Theme.ColorPalette.accent) {
-        self.init(icon: icon, title: title, value: value, tint: tint) { EmptyView() }
-    }
-}
-
-private struct TagsCard: View {
-    let post: Post
-    var onOpenTag: (String) -> Void
-    var onCopyTag: (String) -> Void
-
-    private var hasCategorizedSections: Bool {
-        !(post.tagsArtist.isEmpty && post.tagsCopyright.isEmpty && post.tagsCharacter.isEmpty
-            && post.tagsGeneral.isEmpty && post.tagsMeta.isEmpty)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Label("Теги", systemImage: "tag")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Theme.ColorPalette.textPrimary)
-                Spacer(minLength: 0)
-                if !post.allTags.isEmpty {
-                    Text("\(post.allTags.count)")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.ColorPalette.textMuted)
-                }
-            }
-
-            Divider().opacity(0.08)
-
-            if hasCategorizedSections {
-                VStack(alignment: .leading, spacing: 16) {
-                    if !post.tagsArtist.isEmpty {
-                        TagSection(
-                            title: "Artist",
-                            color: .purple,
-                            tags: post.tagsArtist,
-                            onOpenTag: onOpenTag,
-                            onCopyTag: onCopyTag
-                        )
-                    }
-                    if !post.tagsCopyright.isEmpty {
-                        TagSection(
-                            title: "Copyright",
-                            color: .teal,
-                            tags: post.tagsCopyright,
-                            onOpenTag: onOpenTag,
-                            onCopyTag: onCopyTag
-                        )
-                    }
-                    if !post.tagsCharacter.isEmpty {
-                        TagSection(
-                            title: "Characters",
-                            color: .orange,
-                            tags: post.tagsCharacter,
-                            onOpenTag: onOpenTag,
-                            onCopyTag: onCopyTag
-                        )
-                    }
-                    if !post.tagsGeneral.isEmpty {
-                        TagSection(
-                            title: "General",
-                            color: .secondary,
-                            tags: post.tagsGeneral,
-                            onOpenTag: onOpenTag,
-                            onCopyTag: onCopyTag
-                        )
-                    }
-                    if !post.tagsMeta.isEmpty {
-                        TagSection(
-                            title: "Meta",
-                            color: .pink,
-                            tags: post.tagsMeta,
-                            onOpenTag: onOpenTag,
-                            onCopyTag: onCopyTag
-                        )
-                    }
-                }
-            } else if !post.allTags.isEmpty {
-                TagFlowView(
-                    tags: post.allTags,
-                    tint: Theme.ColorPalette.accent,
-                    onOpenTag: { onOpenTag($0) },
-                    onCopyTag: { onCopyTag($0) }
-                )
-            } else {
-                Text("No tags")
-                    .font(.callout)
-                    .foregroundStyle(Theme.ColorPalette.textMuted)
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .glassCard(cornerRadius: 20, hoverElevates: false)
-    }
-}
-
-private struct CommentsCard: View {
-    let comments: [Comment]
-    let isLoading: Bool
-    let error: String?
-    let hasMore: Bool
-    let isLoadingMore: Bool
-    @Binding var newComment: String
-    let isSubmitting: Bool
-    let canSubmit: Bool
-    let onReload: () -> Void
-    let onLoadMore: () -> Void
-    let onSubmit: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Label("Комментарии", systemImage: "text.bubble")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Theme.ColorPalette.textPrimary)
-                Spacer(minLength: 0)
-                Theme.IconButton(
-                    systemName: "arrow.clockwise",
-                    isDisabled: isLoading,
-                    action: onReload
-                )
-            }
-
-            if isLoading {
-                HStack(spacing: 10) {
-                    ProgressView()
-                    Text("Loading comments…")
-                        .font(.callout)
-                        .foregroundStyle(Theme.ColorPalette.textMuted)
-                }
-            } else if let error {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(error)
-                        .font(.callout)
-                        .foregroundStyle(Theme.ColorPalette.textMuted)
-                    Button(action: onReload) {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
-                }
-            } else if comments.isEmpty {
-                Text("No comments yet")
-                    .font(.callout)
-                    .foregroundStyle(Theme.ColorPalette.textMuted)
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(comments) { comment in
-                        CommentRow(comment: comment)
-                        if comment.id != comments.last?.id {
-                            Divider().opacity(0.1)
-                        }
-                    }
-                }
-            }
-
-            if hasMore {
-                if isLoadingMore {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                } else {
-                    Button(action: onLoadMore) {
-                        Label("Загрузить ещё", systemImage: "chevron.down")
-                            .font(.callout.weight(.semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
-                }
-            }
-
-            Divider().opacity(0.08)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Add Comment")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.ColorPalette.textPrimary)
-
-                TextEditor(text: $newComment)
-                    .frame(minHeight: 90)
-                    .scrollContentBackground(.hidden)
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(Theme.ColorPalette.controlBackground)
-                            .background(.ultraThinMaterial)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
-                    )
-
-                HStack {
-                    Spacer()
-                    Button(action: onSubmit) {
-                        if isSubmitting {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(.white)
-                        } else {
-                            Label("Post", systemImage: "paperplane")
-                                .font(.callout.weight(.semibold))
-                        }
-                    }
-                    .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
-                    .disabled(
-                        isSubmitting
-                            || newComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || !canSubmit
-                    )
-                }
-
-                Text(
-                    canSubmit ? "Не забудьте соблюдать правила сообщества." : "Для отправки комментариев добавьте креды Danbooru в настройках."
-                )
-                .font(.caption)
-                .foregroundStyle(Theme.ColorPalette.textMuted)
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .glassCard(cornerRadius: 20, hoverElevates: false)
-    }
-}
-
-private struct TagFlowView: View {
-    let tags: [String]
-    var tint: Color
-    var onOpenTag: ((String) -> Void)? = nil
-    var onCopyTag: ((String) -> Void)? = nil
-
-    var body: some View {
-        Group {
-            if #available(macOS 13.0, iOS 16.0, *) {
-                FlowLayout(alignment: .leading, spacing: 6) {
-                    ForEach(tags, id: \.self) { tag in
-                        TagChip(
-                            tag: tag,
-                            title: tag.replacingOccurrences(of: "_", with: " "),
-                            tint: tint,
-                            onOpen: { onOpenTag?(tag) },
-                            onCopy: { onCopyTag?(tag) }
-                        )
-                    }
-                }
-            } else {
-                // Fallback: адаптивная сетка
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 80), spacing: 6)], alignment: .leading,
-                    spacing: 6
-                ) {
-                    ForEach(tags, id: \.self) { tag in
-                        TagChip(
-                            tag: tag,
-                            title: tag.replacingOccurrences(of: "_", with: " "),
-                            tint: tint,
-                            onOpen: { onOpenTag?(tag) },
-                            onCopy: { onCopyTag?(tag) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct TagChip: View {
-    let tag: String
-    let title: String
-    var tint: Color
-    var onOpen: (() -> Void)?
-    var onCopy: (() -> Void)?
-
-    var body: some View {
-        #if os(macOS)
-            Button(action: { onOpen?() }) {
-                chipContent
-            }
-            .buttonStyle(.plain)
-            .help("Left click: search in app; Right click: copy tag")
-            .overlay(
-                RightClickCatcher(onRightClick: { onCopy?() })
-                    .allowsHitTesting(true)
-            )
-        #else
-            Button(action: { onOpen?() }) {
-                chipContent
-            }
-            .buttonStyle(.plain)
-        #endif
-    }
-
-    private var chipContent: some View {
-        Text(title)
-            .font(.callout.weight(.medium))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                ZStack {
-                    Capsule(style: .continuous)
-                        .fill(tint.opacity(0.18))
-                    Capsule(style: .continuous)
-                        .fill(.ultraThinMaterial)
-                }
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .strokeBorder(tint.opacity(0.45), lineWidth: 1)
-            )
-            .foregroundStyle(tint)
-    }
-}
-
-#if os(macOS)
-    // NSViewRepresentable, чтобы отлавливать правый клик поверх SwiftUI Button
-    private struct RightClickCatcher: NSViewRepresentable {
-        var onRightClick: () -> Void
-
-        func makeNSView(context: Context) -> RightClickCatcherView {
-            let v = RightClickCatcherView()
-            v.onRightClick = onRightClick
-            v.translatesAutoresizingMaskIntoConstraints = false
-            return v
-        }
-
-        func updateNSView(_ nsView: RightClickCatcherView, context: Context) {
-            nsView.onRightClick = onRightClick
-        }
-    }
-
-    private final class RightClickCatcherView: NSView {
-        var onRightClick: (() -> Void)?
-        override func hitTest(_ point: NSPoint) -> NSView? {
-            // Пропускаем ЛКМ, обрабатываем только ПКМ/прочие
-            if let ev = NSApp.currentEvent {
-                switch ev.type {
-                case .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp:
-                    return self
-                case .leftMouseDown, .leftMouseUp:
-                    if ev.modifierFlags.contains(.control) { return self }
-                    return nil
-                default:
-                    return nil
-                }
-            }
-            return nil
-        }
-        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-        override func mouseDown(with event: NSEvent) {
-            if event.modifierFlags.contains(.control) {
-                onRightClick?()
-            } else {
-                super.mouseDown(with: event)
-            }
-        }
-        override func rightMouseDown(with event: NSEvent) {
-            onRightClick?()
-        }
-    }
-#endif
-
-// Универсальный FlowLayout на основе Layout API (macOS 13+)
-@available(macOS 13.0, iOS 16.0, *)
-private struct FlowLayout: Layout {
-    var alignment: HorizontalAlignment = .leading
-    var spacing: CGFloat = 8
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-        var lineHeight: CGFloat = 0
-
-        for view in subviews {
-            let size = view.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
-            if width + size.width > maxWidth {
-                height += lineHeight + spacing
-                width = 0
-                lineHeight = 0
-            }
-            width += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-        height += lineHeight
-        return CGSize(width: maxWidth, height: height)
-    }
-
-    func placeSubviews(
-        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
-    ) {
-        let maxWidth = bounds.width
-        var x: CGFloat = bounds.minX
-        var y: CGFloat = bounds.minY
-        var lineHeight: CGFloat = 0
-
-        for view in subviews {
-            let size = view.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
-            if x + size.width > bounds.minX + maxWidth {
-                x = bounds.minX
-                y += lineHeight + spacing
-                lineHeight = 0
-            }
-            view.place(
-                at: CGPoint(x: x, y: y),
-                proposal: ProposedViewSize(width: size.width, height: size.height))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-    }
-}
-
-// MARK: - Комментарии
-private struct CommentRow: View {
-    let comment: Comment
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(Theme.ColorPalette.controlBackground.opacity(0.9))
-                .overlay(
-                    Text(avatarInitial)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(Theme.ColorPalette.textPrimary)
-                )
-                .frame(width: 36, height: 36)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(authorName)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.ColorPalette.textPrimary)
-                    if let creatorID = comment.creatorID {
-                        Text("#\(creatorID)")
-                            .font(.caption)
-                            .foregroundStyle(Theme.ColorPalette.textMuted)
-                    }
-                    Spacer(minLength: 0)
-                    if let date = comment.createdAt {
-                        Text(date.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(Theme.ColorPalette.textMuted)
-                    }
-                }
-                if let attributed = renderedBody {
-                    Text(attributed)
-                        .font(.callout)
-                        .foregroundStyle(Theme.ColorPalette.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Text(comment.body)
-                        .font(.callout)
-                        .foregroundStyle(Theme.ColorPalette.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Theme.ColorPalette.controlBackground.opacity(0.95))
-                .background(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Theme.ColorPalette.glassBorder.opacity(0.6), lineWidth: 1)
-        )
-    }
-
-    private var authorName: String {
-        if let name = comment.creatorName, !name.isEmpty { return name }
-        return "Anonymous"
-    }
-
-    private var avatarInitial: String {
-        String(authorName.prefix(1)).uppercased()
-    }
-
-    private var renderedBody: AttributedString? {
-        guard !comment.body.isEmpty else { return nil }
-        let markdown = sanitizeBBCode(comment.body)
-        return try? AttributedString(
-            markdown: markdown,
-            options: AttributedString.MarkdownParsingOptions(
-                interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )
-    }
-
-    private func sanitizeBBCode(_ text: String) -> String {
-        var output = text
-        output = output.replacingOccurrences(of: "[spoiler]", with: "||")
-        output = output.replacingOccurrences(of: "[/spoiler]", with: "||")
-        output = output.replacingOccurrences(of: "[quote]", with: "> ")
-        output = output.replacingOccurrences(of: "[/quote]", with: "\n")
-        return output
-    }
-}
-
-// MARK: - Секция тегов
-private struct TagSection: View {
-    let title: String
-    let color: Color
-    let tags: [String]
-    var onOpenTag: ((String) -> Void)? = nil
-    var onCopyTag: ((String) -> Void)? = nil
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(color.opacity(0.16))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(color.opacity(0.4), lineWidth: 1)
-                    )
-                    .frame(width: 30, height: 30)
-                    .overlay(
-                        Image(systemName: "tag")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(color)
-                    )
-
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Theme.ColorPalette.textPrimary)
-
-                Spacer(minLength: 0)
-
-                #if os(macOS)
-                    Theme.IconButton(
-                        systemName: "doc.on.doc",
-                        size: 28,
-                        isDisabled: tags.isEmpty
-                    ) {
-                        let pb = NSPasteboard.general
-                        pb.clearContents()
-                        pb.setString(tags.joined(separator: " "), forType: .string)
-                    }
-                    .help("Copy section tags")
-                #endif
-            }
-            TagFlowView(
-                tags: tags,
-                tint: color,
-                onOpenTag: onOpenTag,
-                onCopyTag: onCopyTag
-            )
-        }
-    }
-}
-
-#if os(macOS)
-    // MARK: - Панорамирование и зум (трекпад + мышь) через AppKit
-    private struct PanZoomProxy: NSViewRepresentable {
-        typealias NSViewType = PanZoomNSView
-        var onPan: (CGSize) -> Void
-        var onPanEnd: (() -> Void)? = nil
-        var onMagnify: (CGFloat, CGPoint) -> Void
-        var onDoubleClick: ((CGPoint) -> Void)? = nil
-        var buildContextMenu: (() -> NSMenu)? = nil
-
-        func makeNSView(context: Context) -> PanZoomNSView {
-            let v = PanZoomNSView()
-            v.onPan = onPan
-            v.onPanEnd = onPanEnd
-            v.onMagnify = onMagnify
-            v.onDoubleClick = onDoubleClick
-            v.buildContextMenu = buildContextMenu
-            v.wantsLayer = true
-            v.layer?.backgroundColor = NSColor.clear.cgColor
-            return v
-        }
-
-        func updateNSView(_ nsView: PanZoomNSView, context: Context) {
-            nsView.onPan = onPan
-            nsView.onPanEnd = onPanEnd
-            nsView.onMagnify = onMagnify
-            nsView.onDoubleClick = onDoubleClick
-            nsView.buildContextMenu = buildContextMenu
-        }
-    }
-
-    private final class PanZoomNSView: NSView {
-        var onPan: ((CGSize) -> Void)?
-        var onPanEnd: (() -> Void)?
-        var onMagnify: ((CGFloat, CGPoint) -> Void)?
-        var onDoubleClick: ((CGPoint) -> Void)?
-        var buildContextMenu: (() -> NSMenu)?
-
-        private var lastMousePoint: NSPoint?
-
-        override var acceptsFirstResponder: Bool { true }
-
-        override func scrollWheel(with event: NSEvent) {
-            onPan?(CGSize(width: event.scrollingDeltaX, height: event.scrollingDeltaY))
-            // Завершение жеста скролла/панорамирования
-            if event.phase == .ended || event.momentumPhase == .ended {
-                onPanEnd?()
-            }
-        }
-
-        override func magnify(with event: NSEvent) {
-            let scale = 1 + event.magnification
-            let p = convert(event.locationInWindow, from: nil)
-            onMagnify?(scale, p)
-        }
-
-        override func mouseDown(with event: NSEvent) {
-            let p = convert(event.locationInWindow, from: nil)
-            if event.clickCount == 2 {
-                onDoubleClick?(p)
-                return
-            }
-            lastMousePoint = p
-        }
-
-        override func mouseDragged(with event: NSEvent) {
-            let p = convert(event.locationInWindow, from: nil)
-            if let last = lastMousePoint {
-                let dx = p.x - last.x
-                let dy = p.y - last.y
-                onPan?(CGSize(width: dx, height: dy))
-            }
-            lastMousePoint = p
-        }
-
-        override func mouseUp(with event: NSEvent) {
-            lastMousePoint = nil
-            onPanEnd?()
-        }
-
-        override func rightMouseDown(with event: NSEvent) {
-            if let menu = buildContextMenu?() {
-                NSMenu.popUpContextMenu(menu, with: event, for: self)
-            } else {
-                super.rightMouseDown(with: event)
-            }
-        }
-    }
-#endif

@@ -305,7 +305,7 @@ struct RemoteImage: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .top)
         .background(
             Group {
                 if decoratedBackground {

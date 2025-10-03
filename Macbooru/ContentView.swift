@@ -644,9 +644,9 @@ private struct BackToOriginChip: View {
             x: 0,
             y: hovering ? 4 : 2
         )
-        .animation(Theme.Animations.interactive, value: hovering)
+        .animation(Theme.Animations.interactive(), value: hovering)
         .onHover { value in
-            withAnimation(Theme.Animations.hover) {
+            withAnimation(Theme.Animations.hover()) {
                 hovering = value
             }
         }
@@ -655,6 +655,7 @@ private struct BackToOriginChip: View {
 
 struct ContentView: View {
     @StateObject private var search = SearchState()
+    @Environment(\.colorScheme) private var colorScheme
     var body: some View {
         NavigationSplitView {
             SidebarView(state: search) {
@@ -673,7 +674,7 @@ struct ContentView: View {
         }
         .environmentObject(search)
         .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
-        .background(Theme.Gradients.appBackground.ignoresSafeArea())
+        .background(Theme.Gradients.appBackground(for: colorScheme).ignoresSafeArea())
     }
 
     @MainActor
