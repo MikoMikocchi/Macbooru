@@ -179,15 +179,21 @@ struct InfoCard: View {
                 }
 
                 if let up = upScore {
-                    InfoRow(icon: "hand.thumbsup.fill", title: "Upvotes", value: "\(up)", tint: .green)
+                    InfoRow(
+                        icon: "hand.thumbsup.fill", title: "Upvotes", value: "\(up)", tint: .green)
                 }
 
                 if let down = downScore {
-                    InfoRow(icon: "hand.thumbsdown.fill", title: "Downvotes", value: "\(down)", tint: .orange)
+                    InfoRow(
+                        icon: "hand.thumbsdown.fill", title: "Downvotes", value: "\(down)",
+                        tint: .orange)
                 }
 
                 if let width = post.width, let height = post.height {
-                    InfoRow(icon: "aspectratio", title: "Size", value: "\(width) × \(height)", tint: .cyan) {
+                    InfoRow(
+                        icon: "aspectratio", title: "Size", value: "\(width) × \(height)",
+                        tint: .cyan
+                    ) {
                         SizeBadge(width: width, height: height)
                     }
                 }
@@ -750,50 +756,50 @@ struct CommentRow: View {
 }
 
 #if os(macOS)
-import AppKit
+    import AppKit
 
-struct RightClickCatcher: NSViewRepresentable {
-    var onRightClick: () -> Void
+    struct RightClickCatcher: NSViewRepresentable {
+        var onRightClick: () -> Void
 
-    func makeNSView(context: Context) -> RightClickCatcherView {
-        let view = RightClickCatcherView()
-        view.onRightClick = onRightClick
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
-    }
+        func makeNSView(context: Context) -> RightClickCatcherView {
+            let view = RightClickCatcherView()
+            view.onRightClick = onRightClick
+            view.translatesAutoresizingMaskIntoConstraints = false
+            return view
+        }
 
-    func updateNSView(_ nsView: RightClickCatcherView, context: Context) {
-        nsView.onRightClick = onRightClick
-    }
-}
-
-final class RightClickCatcherView: NSView {
-    var onRightClick: (() -> Void)?
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let event = NSApp.currentEvent else { return nil }
-        switch event.type {
-        case .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp:
-            return self
-        case .leftMouseDown, .leftMouseUp:
-            if event.modifierFlags.contains(.control) { return self }
-            return nil
-        default:
-            return nil
+        func updateNSView(_ nsView: RightClickCatcherView, context: Context) {
+            nsView.onRightClick = onRightClick
         }
     }
 
-    override func mouseDown(with event: NSEvent) {
-        super.mouseDown(with: event)
-        if event.type == .otherMouseDown || event.type == .rightMouseDown {
+    final class RightClickCatcherView: NSView {
+        var onRightClick: (() -> Void)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            switch event.type {
+            case .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp:
+                return self
+            case .leftMouseDown, .leftMouseUp:
+                if event.modifierFlags.contains(.control) { return self }
+                return nil
+            default:
+                return nil
+            }
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            super.mouseDown(with: event)
+            if event.type == .otherMouseDown || event.type == .rightMouseDown {
+                onRightClick?()
+            }
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
             onRightClick?()
         }
-    }
 
-    override func rightMouseDown(with event: NSEvent) {
-        onRightClick?()
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     }
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-}
 #endif
