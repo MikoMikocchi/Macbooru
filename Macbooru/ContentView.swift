@@ -452,55 +452,30 @@ private struct PostsGridScroll: View {
 
     var body: some View {
         ScrollView {
-            if layout == .grid {
-                LazyVGrid(columns: columns, spacing: gridSpacing) {
-                    // Use enumerated to detect near-end items reliably
-                    ForEach(Array(posts.enumerated()), id: \.1.id) { index, post in
-                        NavigationLink(value: post) {
-                            PostTileView(post: post, height: tileHeight)
-                                .frame(maxWidth: .infinity)
-                                .contentShape(Rectangle())
-                        }
-                        .id(post.id)
-                        .buttonStyle(.plain)
-                        .frame(height: tileHeight)
-                        .modifier(AnimatedItemModifier(index: index))
-                        .onAppear {
-                            guard infiniteEnabled else { return }
-                            let threshold = max(0, posts.count - 5)
-                            if index >= threshold { onReachedEnd?() }
-                        }
+            LazyVGrid(columns: columns, spacing: gridSpacing) {
+                // Use enumerated to detect near-end items reliably
+                ForEach(Array(posts.enumerated()), id: \.1.id) { index, post in
+                    NavigationLink(value: post) {
+                        PostTileView(post: post, height: tileHeight)
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
                     }
-                    if isLoading { ProgressView().padding() }
-                    // Keep a sentinel as a fallback; it may help in small datasets
-                    if infiniteEnabled { EndReachedSentinel().onAppear { onReachedEnd?() } }
-                }
-                .padding(.horizontal, 32)
-                .padding(.vertical, 28)
-            } else {
-                LazyVStack(alignment: .leading, spacing: gridSpacing) {
-                    ForEach(Array(posts.enumerated()), id: \.1.id) { index, post in
-                        NavigationLink(value: post) {
-                            PostTileView(post: post, height: tileHeight)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
-                        }
-                        .id(post.id)
-                        .buttonStyle(.plain)
-                        .frame(height: tileHeight)
-                        .padding(.horizontal, 32)
-                        .modifier(AnimatedItemModifier(index: index))
-                        .onAppear {
-                            guard infiniteEnabled else { return }
-                            let threshold = max(0, posts.count - 5)
-                            if index >= threshold { onReachedEnd?() }
-                        }
+                    .id(post.id)
+                    .buttonStyle(.plain)
+                    .frame(height: tileHeight)
+                    .modifier(AnimatedItemModifier(index: index))
+                    .onAppear {
+                        guard infiniteEnabled else { return }
+                        let threshold = max(0, posts.count - 5)
+                        if index >= threshold { onReachedEnd?() }
                     }
-                    if isLoading { ProgressView().padding() }
-                    if infiniteEnabled { EndReachedSentinel().onAppear { onReachedEnd?() } }
                 }
-                .padding(.vertical, 28)
+                if isLoading { ProgressView().padding() }
+                // Keep a sentinel as a fallback; it may help in small datasets
+                if infiniteEnabled { EndReachedSentinel().onAppear { onReachedEnd?() } }
             }
+            .padding(.horizontal, 32)
+            .padding(.vertical, 28)
         }
     }
 }
@@ -654,7 +629,7 @@ private struct BackToOriginChip: View {
 }
 
 struct ContentView: View {
-    @StateObject private var search = SearchState()
+    @EnvironmentObject var search: SearchState
     @Environment(\.colorScheme) private var colorScheme
     var body: some View {
         NavigationSplitView {
@@ -672,7 +647,6 @@ struct ContentView: View {
                     }
             }
         }
-        .environmentObject(search)
         .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
         .background(Theme.Gradients.appBackground(for: colorScheme).ignoresSafeArea())
     }

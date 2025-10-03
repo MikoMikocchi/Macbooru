@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct MacbooruApp: App {
     @StateObject private var dependenciesStore: AppDependenciesStore
+    @StateObject private var search = SearchState()
 
     @MainActor
     init() {
@@ -21,6 +22,7 @@ struct MacbooruApp: App {
             ContentView()
                 .environment(\.appDependencies, dependenciesStore.dependencies)
                 .environmentObject(dependenciesStore)
+                .environmentObject(search)
         }
         .commands { AppShortcuts() }
 
@@ -29,6 +31,7 @@ struct MacbooruApp: App {
                 SettingsView()
                     .environment(\.appDependencies, dependenciesStore.dependencies)
                     .environmentObject(dependenciesStore)
+                    .environmentObject(search)
                     .frame(minWidth: 920, maxWidth: 960, minHeight: 700)
             }
         #endif

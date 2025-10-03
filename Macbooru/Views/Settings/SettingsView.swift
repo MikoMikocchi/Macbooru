@@ -6,6 +6,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var dependenciesStore: AppDependenciesStore
+    @EnvironmentObject private var search: SearchState
     @State private var username: String = ""
     @State private var apiKey: String = ""
     @State private var status: StatusMessage? = nil
@@ -261,6 +262,21 @@ struct SettingsView: View {
             Label("Общие настройки", systemImage: "slider.horizontal.3")
         }) {
             VStack(alignment: .leading, spacing: 12) {
+                ToggleRow(
+                    title: "Бесконечная прокрутка",
+                    subtitle: "Автоматически подгружать следующую страницу при прокрутке.",
+                    systemImage: "infinity",
+                    isOn: $search.infiniteScrollEnabled
+                )
+                Divider().opacity(0.1)
+                ToggleRow(
+                    title: "Щадящий режим (Low performance)",
+                    subtitle:
+                        "Отключает анимации и снижает качество интерполяции для слабых устройств.",
+                    systemImage: "tortoise",
+                    isOn: $search.lowPerformance
+                )
+                Divider().opacity(0.1)
                 ToggleRow(
                     title: "Обновлять список постов при запуске",
                     subtitle: "Автоматически загружает свежие посты при старте приложения.",

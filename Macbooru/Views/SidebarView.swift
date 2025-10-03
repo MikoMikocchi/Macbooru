@@ -91,8 +91,33 @@ struct SidebarView: View {
                                 }
                             }
 
-                        // Кнопки действий
+                        // Кнопки действий (переносим Search сюда)
                         HStack(spacing: 8) {
+                            Button {
+                                // Выполнить поиск
+                                suggestions.removeAll()
+                                state.resetForNewSearch()
+                                let q = state.tags.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !q.isEmpty {
+                                    recentStore.addOrTouch(
+                                        query: q, rating: state.rating, sort: state.sort)
+                                    refreshRecent()
+                                }
+                                onSearch?()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 12, weight: .semibold))
+                                    Text("Search")
+                                        .font(.caption.weight(.medium))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(.blue.opacity(0.18), in: Capsule())
+                                .foregroundStyle(.blue)
+                            }
+                            .keyboardShortcut(.return, modifiers: [])
+                            .buttonStyle(.plain)
                             Button {
                                 saveCurrentSearch()
                             } label: {
@@ -447,24 +472,7 @@ struct SidebarView: View {
                                 // не триггерим сразу поиск, чтобы не дёргать API при наборе — пользователь нажмёт Enter/кнопку
                             }
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "rectangle.grid.1x2.fill").foregroundStyle(.secondary)
-                            Text("Layout").font(.subheadline).fontWeight(.semibold).foregroundStyle(
-                                .secondary)
-                        }
-                        Picker("Layout", selection: $state.layout) {
-                            ForEach(SearchState.LayoutMode.allCases) { m in
-                                Text(m.label).tag(m)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .controlSize(.small)
-                        .labelsHidden()
-                        .onChange(of: state.layout) { _, _ in
-                            // моментально влияет на представление, без нового запроса
-                        }
-                    }
+                    // Убрали переключатель Layout — используем только Grid
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "hand.raised.fill").foregroundStyle(.secondary)
@@ -519,37 +527,12 @@ struct SidebarView: View {
                             onSearch?()
                         }
                     }
-                    Toggle(isOn: $state.infiniteScrollEnabled) {
-                        Label("Infinite Scroll", systemImage: "infinity")
-                    }
-                    .toggleStyle(.switch)
-                    .onChange(of: state.infiniteScrollEnabled) { _, _ in
-                        // При переключении — сброс и перезапрос с первой страницы
-                        state.resetForNewSearch()
-                        onSearch?()
-                    }
-                    Toggle(isOn: $state.lowPerformance) {
-                        Label("Low Performance Mode", systemImage: "tortoise")
-                    }
-                    .toggleStyle(.switch)
-                    .onChange(of: state.lowPerformance) { _, _ in
-                        state.resetForNewSearch()
-                        onSearch?()
-                    }
+                    // Перенесено в Settings: Infinite Scroll и Low Performance
                     Toggle(isOn: $state.blurSensitive) {
                         Label("Blur NSFW (Q/E)", systemImage: "eye.slash")
                     }
                     .toggleStyle(.switch)
-                    Button("Search") {
-                        state.resetForNewSearch()
-                        let q = state.tags.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !q.isEmpty {
-                            recentStore.addOrTouch(query: q, rating: state.rating, sort: state.sort)
-                            refreshRecent()
-                        }
-                        onSearch?()
-                    }
-                    .keyboardShortcut(.return, modifiers: [])
+                    // Кнопку Search снизу убрали — она перенесена наверх к полю ввода
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 12)
