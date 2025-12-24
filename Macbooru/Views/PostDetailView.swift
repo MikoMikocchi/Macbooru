@@ -15,44 +15,30 @@ struct PostDetailView: View {
     @EnvironmentObject private var dependenciesStore: AppDependenciesStore
     @Environment(\.colorScheme) private var colorScheme
 
-    // Зум и панорамирование
+    @StateObject private var viewModel: PostDetailViewModel
+
+    // Зум и панорамирование (UI state)
     @State private var zoom: CGFloat = 1.0
     @State private var lastZoom: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastDrag: CGSize = .zero
-    @State private var saveMessage: String? = nil
-    @State private var comments: [Comment] = []
-    @State private var isLoadingComments = false
-    @State private var commentsError: String? = nil
-    @State private var newComment: String = ""
-    @State private var isSubmittingComment = false
-    @State private var isInteractionInProgress = false
-    @State private var isFavorited: Bool? = nil
-    @State private var favoriteCount: Int? = nil
-    @State private var upScore: Int? = nil
-    @State private var downScore: Int? = nil
-    @State private var lastVoteScore: Int? = nil
+    
+    // One-time sync
     @State private var didSyncInitialState = false
-    @State private var commentsPage: Int = 1
-    @State private var hasMoreComments: Bool = true
-    @State private var isLoadingMoreComments: Bool = false
-    @State private var isDownloading = false
-
-    private let commentsPageSize = 40
 
     private let imageCornerRadius: CGFloat = 24
 
-    private var bestImageCandidates: [URL] {
-        [post.largeURL, post.fileURL, post.previewURL].compactMap { $0 }
+    init(post: Post) {
+        self.post = post
+        _viewModel = StateObject(wrappedValue: PostDetailViewModel(post: post))
     }
-    private var pageURL: URL { URL(string: "https://danbooru.donmai.us/posts/\(post.id)")! }
 
     @ViewBuilder
     private func openMenu(state: ActionChip.ChipState = .normal) -> some View {
         Menu {
             Button("Open post page", systemImage: "link") {
                 #if os(macOS)
-                    NSWorkspace.shared.open(pageURL)
+                    NSWorkspace.shared.open(viewModel.pageURL)
                 #endif
             }
             if let u = post.largeURL {
@@ -94,7 +80,7 @@ struct PostDetailView: View {
             Button("Copy post URL", systemImage: "link") { copyPostURL() }
             if post.fileURL != nil || post.largeURL != nil {
                 Button("Copy image", systemImage: "photo.on.rectangle") {
-                    Task { await copyImageToPasteboard() }
+                    Task { await viewModel.copyImageToPasteboard() }
                 }
             }
             if post.fileURL != nil {
@@ -127,37 +113,37 @@ struct PostDetailView: View {
     private func interactMenu(state: ActionChip.ChipState) -> some View {
         Menu {
             Button {
-                Task { await performFavorite(add: !currentFavoriteState) }
+                Task { await viewModel.performFavorite(add: !viewModel.currentFavoriteState) }
             } label: {
                 Label(
-                    currentFavoriteState ? "Убрать из избранного" : "В избранное",
-                    systemImage: currentFavoriteState ? "heart.slash" : "heart"
+                    viewModel.currentFavoriteState ? "Убрать из избранного" : "В избранное",
+                    systemImage: viewModel.currentFavoriteState ? "heart.slash" : "heart"
                 )
             }
-            .disabled(isInteractionInProgress || !dependenciesStore.hasCredentials)
+            .disabled(viewModel.isInteractionInProgress || !dependenciesStore.hasCredentials)
 
             Divider()
 
             Button {
-                Task { await performVote(score: 1) }
+                Task { await viewModel.performVote(score: 1) }
             } label: {
                 Label("Vote +1", systemImage: "hand.thumbsup")
             }
             .disabled(
-                isInteractionInProgress
+                viewModel.isInteractionInProgress
                     || !dependenciesStore.hasCredentials
-                    || lastVoteScore == 1
+                    || viewModel.lastVoteScore == 1
             )
 
             Button {
-                Task { await performVote(score: -1) }
+                Task { await viewModel.performVote(score: -1) }
             } label: {
                 Label("Vote -1", systemImage: "hand.thumbsdown")
             }
             .disabled(
-                isInteractionInProgress
+                viewModel.isInteractionInProgress
                     || !dependenciesStore.hasCredentials
-                    || lastVoteScore == -1
+                    || viewModel.lastVoteScore == -1
             )
         } label: {
             ActionChip(
@@ -197,7 +183,7 @@ struct PostDetailView: View {
 
     private var interactChipState: ActionChip.ChipState {
         if !dependenciesStore.hasCredentials { return .disabled }
-        if isInteractionInProgress { return .loading }
+        if viewModel.isInteractionInProgress { return .loading }
         return .normal
     }
 
@@ -212,7 +198,7 @@ struct PostDetailView: View {
                     // Высота зоны просмотра арта ограничена, чтобы всё умещалось на одном экране
                     let h = max(420.0, min(proxy.size.height, maxHeight))
                     RemoteImage(
-                        candidates: bestImageCandidates,
+                        candidates: viewModel.bestImageCandidates,
                         height: h,
                         contentMode: ContentMode.fit,
                         animateFirstAppearance: true,
@@ -384,9 +370,9 @@ struct PostDetailView: View {
                 copyMenu: { copyMenu() },
                 interactMenu: { interactMenu(state: interactChipState) },
                 moreMenu: { moreMenu() },
-                onDownload: { Task { await downloadBestImage() } },
-                downloadDisabled: bestImageCandidates.isEmpty,
-                isDownloading: isDownloading
+                onDownload: { Task { await viewModel.downloadBestImage() } },
+                downloadDisabled: viewModel.bestImageCandidates.isEmpty,
+                isDownloading: viewModel.isDownloading
             )
         }
     }
@@ -396,10 +382,10 @@ struct PostDetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             InfoCard(
                 post: post,
-                favoriteCount: favoriteCount ?? post.favCount,
-                isFavorited: isFavorited,
-                upScore: upScore ?? post.upScore,
-                downScore: downScore ?? post.downScore
+                favoriteCount: viewModel.favoriteCount ?? post.favCount,
+                isFavorited: viewModel.isFavorited,
+                upScore: viewModel.upScore ?? post.upScore,
+                downScore: viewModel.downScore ?? post.downScore
             )
 
             TagsCard(
@@ -409,17 +395,17 @@ struct PostDetailView: View {
             )
 
             CommentsCard(
-                comments: comments,
-                isLoading: isLoadingComments,
-                error: commentsError,
-                hasMore: hasMoreComments,
-                isLoadingMore: isLoadingMoreComments,
-                newComment: $newComment,
-                isSubmitting: isSubmittingComment,
+                comments: viewModel.comments,
+                isLoading: viewModel.isLoadingComments,
+                error: viewModel.commentsError,
+                hasMore: viewModel.hasMoreComments,
+                isLoadingMore: viewModel.isLoadingMoreComments,
+                newComment: $viewModel.newComment,
+                isSubmitting: viewModel.isSubmittingComment,
                 canSubmit: dependenciesStore.hasCredentials,
-                onReload: { Task { await refreshComments() } },
-                onLoadMore: { Task { await loadMoreComments() } },
-                onSubmit: { Task { await submitComment() } }
+                onReload: { Task { await viewModel.refreshComments() } },
+                onLoadMore: { Task { await viewModel.loadMoreComments() } },
+                onSubmit: { Task { await viewModel.submitComment() } }
             )
         }
         .padding(.vertical, isCompact ? 0 : 4)
@@ -464,20 +450,20 @@ struct PostDetailView: View {
                 Button(action: { copyTagsToPasteboard() }) { Image(systemName: "doc.on.doc") }
                     .help("Copy tags")
                     .keyboardShortcut("c", modifiers: [.command, .shift])
-                Button(action: { Task { await downloadBestImage() } }) {
-                    if isDownloading {
+                Button(action: { Task { await viewModel.downloadBestImage() } }) {
+                    if viewModel.isDownloading {
                         ProgressView()
                             .controlSize(.small)
                     } else {
                         Image(systemName: "tray.and.arrow.down")
                     }
                 }
-                .disabled(isDownloading || bestImageCandidates.isEmpty)
+                .disabled(viewModel.isDownloading || viewModel.bestImageCandidates.isEmpty)
                 .help("Download best image")
             }
         }
         .overlay(alignment: .bottom) {
-            if let msg = saveMessage {
+            if let msg = viewModel.saveMessage {
                 Text(msg)
                     .font(.callout)
                     .padding(.horizontal, 12)
@@ -485,202 +471,25 @@ struct PostDetailView: View {
                     .background(.ultraThinMaterial, in: Capsule())
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .padding(.bottom, 12)
-                    .onAppear {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            withAnimation { saveMessage = nil }
-                        }
-                    }
             }
         }
         .task(id: post.id) {
-            await refreshComments()
+            viewModel.inject(dependencies: dependencies)
+            viewModel.hasCredentials = dependenciesStore.hasCredentials
+            viewModel.onAuthenticationFailure = { [weak dependenciesStore] msg in
+                dependenciesStore?.handleAuthenticationFailure(message: msg)
+            }
+            await viewModel.refreshComments()
         }
         .onAppear {
             if !didSyncInitialState {
-                syncPostState()
+                viewModel.syncPostState()
                 didSyncInitialState = true
             }
+            viewModel.hasCredentials = dependenciesStore.hasCredentials
         }
-    }
-
-    @MainActor
-    private func refreshComments() async {
-        guard !isLoadingComments else { return }
-        commentsPage = 1
-        hasMoreComments = true
-        comments.removeAll()
-        await loadComments(page: 1, replace: true)
-    }
-
-    @MainActor
-    private func submitComment() async {
-        let trimmed = newComment.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard !isSubmittingComment else { return }
-        isSubmittingComment = true
-        commentsError = nil
-        do {
-            let comment = try await dependencies.comments.create(postID: post.id, body: trimmed)
-            newComment = ""
-            comments.append(comment)
-            comments.sort(by: commentOrder)
-            saveMessage = "Comment posted"
-        } catch {
-            commentsError = commentErrorMessage(for: error)
-        }
-        isSubmittingComment = false
-    }
-
-    @MainActor
-    private func loadMoreComments() async {
-        guard hasMoreComments, !isLoadingMoreComments else { return }
-        let nextPage = commentsPage + 1
-        await loadComments(page: nextPage, replace: false)
-    }
-
-    @MainActor
-    private func loadComments(page: Int, replace: Bool) async {
-        if replace {
-            isLoadingComments = true
-        } else {
-            isLoadingMoreComments = true
-        }
-        commentsError = nil
-        do {
-            let items = try await dependencies.comments.load(
-                postID: post.id, page: page, limit: commentsPageSize)
-            if replace {
-                comments = items
-            } else {
-                comments.append(contentsOf: items)
-            }
-            comments.sort(by: commentOrder)
-            commentsPage = page
-            hasMoreComments = items.count == commentsPageSize
-        } catch {
-            commentsError = commentErrorMessage(for: error)
-        }
-        isLoadingComments = false
-        isLoadingMoreComments = false
-    }
-
-    private func commentOrder(_ lhs: Comment, _ rhs: Comment) -> Bool {
-        let lhsDate = lhs.createdAt ?? .distantPast
-        let rhsDate = rhs.createdAt ?? .distantPast
-        return lhsDate < rhsDate
-    }
-
-    private func commentErrorMessage(for error: Error) -> String {
-        if let apiError = error as? APIError {
-            switch apiError {
-            case .missingCredentials:
-                return "Authenticate with Danbooru (API key + username) to use this action."
-            case .serverError(let code):
-                if code == 401 || code == 403 {
-                    return "Недостаточно прав или неверные учетные данные."
-                }
-                return "Server error (status \(code)). Try again later."
-            case .decoding(let underlying):
-                return "Failed to parse server response: \(underlying.localizedDescription)"
-            case .invalidResponse:
-                return "Invalid server response."
-            }
-        }
-        if let urlError = error as? URLError {
-            return "Network error: \(urlError.localizedDescription)"
-        }
-        return error.localizedDescription
-    }
-
-    @MainActor
-    private func performFavorite(add: Bool) async {
-        guard dependenciesStore.hasCredentials else {
-            withAnimation { saveMessage = "Добавьте учетные данные Danbooru в Настройках" }
-            return
-        }
-        guard !isInteractionInProgress else { return }
-        isInteractionInProgress = true
-        defer { isInteractionInProgress = false }
-        do {
-            if add {
-                try await dependencies.favoritePost.favorite(postID: post.id)
-                updateFavoriteState(isFavorited: true)
-                withAnimation { saveMessage = "Добавлено в избранное" }
-            } else {
-                try await dependencies.favoritePost.unfavorite(postID: post.id)
-                updateFavoriteState(isFavorited: false)
-                withAnimation { saveMessage = "Удалено из избранного" }
-            }
-        } catch {
-            handleAuthErrorIfNeeded(error)
-            withAnimation { saveMessage = commentErrorMessage(for: error) }
-        }
-    }
-
-    @MainActor
-    private func performVote(score: Int) async {
-        guard dependenciesStore.hasCredentials else {
-            withAnimation { saveMessage = "Добавьте учетные данные Danbooru в Настройках" }
-            return
-        }
-        guard !isInteractionInProgress else { return }
-        isInteractionInProgress = true
-        defer { isInteractionInProgress = false }
-        do {
-            try await dependencies.votePost.vote(postID: post.id, score: score)
-            let message = score >= 0 ? "Оценка +1 отправлена" : "Оценка -1 отправлена"
-            updateVoteState(score: score)
-            lastVoteScore = score
-            withAnimation { saveMessage = message }
-        } catch {
-            handleAuthErrorIfNeeded(error)
-            withAnimation { saveMessage = commentErrorMessage(for: error) }
-        }
-    }
-
-    private func syncPostState() {
-        isFavorited = post.isFavorited
-        favoriteCount = post.favCount
-        upScore = post.upScore
-        downScore = post.downScore
-    }
-
-    private func updateFavoriteState(isFavorited newValue: Bool) {
-        let previous = isFavorited ?? post.isFavorited ?? false
-        isFavorited = newValue
-        var base = favoriteCount ?? post.favCount ?? 0
-        if newValue && !previous {
-            base += 1
-        } else if !newValue && previous {
-            base = max(0, base - 1)
-        }
-        favoriteCount = base
-    }
-
-    private func updateVoteState(score: Int) {
-        if score >= 0 {
-            let current = upScore ?? post.upScore ?? 0
-            upScore = current + score
-        } else {
-            let current = downScore ?? post.downScore ?? 0
-            downScore = current + abs(score)
-        }
-    }
-
-    private var currentFavoriteState: Bool {
-        isFavorited ?? post.isFavorited ?? false
-    }
-
-    private func handleAuthErrorIfNeeded(_ error: Error) {
-        if case APIError.serverError(let code) = error, code == 401 || code == 403 {
-            dependenciesStore.handleAuthenticationFailure(
-                message: "Недействительные учетные данные Danbooru"
-            )
-        }
-        if let apiError = error as? APIError, case .missingCredentials = apiError {
-            dependenciesStore.handleAuthenticationFailure(
-                message: "Укажите учетные данные Danbooru"
-            )
+        .onChange(of: dependenciesStore.credentials) { _ in
+            viewModel.hasCredentials = dependenciesStore.hasCredentials
         }
     }
 
@@ -791,34 +600,9 @@ struct PostDetailView: View {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString(s, forType: .string)
-                withAnimation { saveMessage = "Tags copied" }
+                viewModel.showToast("Tags copied")
             }
         #endif
-    }
-
-    @MainActor
-    private func downloadBestImage() async {
-        guard !isDownloading else { return }
-        guard let url = bestImageCandidates.first else { return }
-        isDownloading = true
-        defer { isDownloading = false }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let fm = FileManager.default
-            let downloads = try fm.url(
-                for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-            let folder = downloads.appendingPathComponent("Macbooru", isDirectory: true)
-            if !fm.fileExists(atPath: folder.path) {
-                try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            }
-            let filename =
-                url.lastPathComponent.isEmpty ? "post-\(post.id).jpg" : url.lastPathComponent
-            let dest = folder.appendingPathComponent(filename)
-            try data.write(to: dest)
-            withAnimation { saveMessage = "Saved to Downloads/Macbooru" }
-        } catch {
-            withAnimation { saveMessage = "Save failed: \(error.localizedDescription)" }
-        }
     }
 
     // ЛКМ: начать поиск по тегу внутри приложения и закрыть детальный экран
@@ -836,7 +620,7 @@ struct PostDetailView: View {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(tag, forType: .string)
-            withAnimation { saveMessage = "Tag copied: \(tag)" }
+            viewModel.showToast("Tag copied: \(tag)")
         #endif
     }
 
@@ -846,37 +630,17 @@ struct PostDetailView: View {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(url.absoluteString, forType: .string)
-            withAnimation { saveMessage = "Original URL copied" }
+            viewModel.showToast("Original URL copied")
         #endif
     }
 
     private func copyPostURL() {
         #if os(macOS)
-            let url = pageURL
+            let url = viewModel.pageURL
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(url.absoluteString, forType: .string)
-            withAnimation { saveMessage = "Post URL copied" }
-        #endif
-    }
-
-    @MainActor
-    private func copyImageToPasteboard() async {
-        #if os(macOS)
-            guard let url = post.fileURL ?? post.largeURL ?? post.previewURL else { return }
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                guard let image = NSImage(data: data) else {
-                    withAnimation { saveMessage = "Cannot decode image" }
-                    return
-                }
-                let pb = NSPasteboard.general
-                pb.clearContents()
-                pb.writeObjects([image])
-                withAnimation { saveMessage = "Image copied" }
-            } catch {
-                withAnimation { saveMessage = "Copy failed: \(error.localizedDescription)" }
-            }
+            viewModel.showToast("Post URL copied")
         #endif
     }
 
@@ -886,7 +650,7 @@ struct PostDetailView: View {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(url.absoluteString, forType: .string)
-            withAnimation { saveMessage = "Source URL copied" }
+            viewModel.showToast("Source URL copied")
         #endif
     }
 
@@ -898,9 +662,7 @@ struct PostDetailView: View {
                     create: false)
                 NSWorkspace.shared.activateFileViewerSelecting([downloads])
             } catch {
-                withAnimation {
-                    saveMessage = "Cannot open Downloads: \(error.localizedDescription)"
-                }
+                viewModel.showToast("Cannot open Downloads: \(error.localizedDescription)")
             }
         #endif
     }
@@ -1076,15 +838,15 @@ struct PostDetailView: View {
                 zoomInAction: { stepZoom(in: +1) },
                 zoomOutAction: { stepZoom(in: -1) },
                 centerAction: { withAnimation(.easeInOut(duration: 0.15)) { offset = .zero } },
-                openPostPageAction: { NSWorkspace.shared.open(pageURL) },
+                openPostPageAction: { NSWorkspace.shared.open(viewModel.pageURL) },
                 openLargeAction: { if let u = post.largeURL { NSWorkspace.shared.open(u) } },
                 openOriginalAction: { if let u = post.fileURL { NSWorkspace.shared.open(u) } },
                 copyTagsAction: { copyTagsToPasteboard() },
                 copyPostURLAction: { copyPostURL() },
                 copyOriginalURLAction: { copyOriginalURL() },
-                copyImageAction: { Task { await copyImageToPasteboard() } },
+                copyImageAction: { Task { await viewModel.copyImageToPasteboard() } },
                 copySourceURLAction: { copySourceURL() },
-                downloadAction: { Task { await downloadBestImage() } },
+                downloadAction: { Task { await viewModel.downloadBestImage() } },
                 revealDownloadsFolderAction: { revealDownloadsFolder() }
             )
             // Назначаем целевой объект меню и действию
