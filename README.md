@@ -1,16 +1,16 @@
 <div align="center">
 
-# Macbooru — нативный Danbooru‑клиент для macOS
+# Macbooru
 
 ![CI](https://github.com/MikoMikocchi/Macbooru/actions/workflows/ci.yml/badge.svg)
 ![Swift](https://img.shields.io/badge/Swift-6.2-orange?logo=swift)
 ![Platform](https://img.shields.io/badge/platform-macOS-black?logo=apple)
 
-<img src="Macbooru/Assets.xcassets/MacbooruAppIcon-iOS-Default-1024x1024@1x.png" alt="Macbooru icon" width="180" height="180" style="border-radius:22%" />
+<img src="Macbooru/Assets.xcassets/MacbooruAppIcon-iOS-Default-1024x1024@1x.png" alt="Macbooru icon" width="140" height="140" style="border-radius:20px" />
 
-Нативное приложение на Swift/SwiftUI для просмотра Danbooru на macOS. Быстрый поиск по тегам, удобная сетка, детальная карточка поста, расширенные подсказки и приятный UX.
+Нативный клиент Danbooru для macOS
 
-<sub>Минимальная поддерживаемая платформа: macOS 15/26 (Sequoia/Tahoe)</sub>
+<sub>Требует macOS 15+ (Sequoia)</sub>
 
 </div>
 
@@ -18,85 +18,23 @@
 
 <div align="center">
 
-<img src="docs/images/Macbooru-1.png" alt="Macbooru — главный экран со списком постов" width="960" />
-
-<br/><br/>
-
-<img src="docs/images/Macbooru-2.png" alt="Macbooru — детальная карточка поста" width="960" />
-
-<br/>
-<sub>Скриншоты: главный экран (сайдбар, сетка, счётчик страниц) и детальная карточка поста</sub>
+<img src="docs/images/Macbooru-1.png" alt="Главный экран" width="900" />
+<img src="docs/images/Macbooru-2.png" alt="Карточка поста" width="900" />
 
 </div>
 
 ## Возможности
 
-- Поиск по тегам с рейтингами `rating:*` (G/S/Q/E), минус‑тегами и автодополнением
-- Сортировка чипами: Recent, Newest, Oldest, Rank, Score, Favs, Random
-- Сохранённые запросы (Saved) с пином/удалением и ограничением по высоте блока (Expand/Collapse)
-- История поисков (Recent) — быстрый доступ к последним запросам
-- Адаптивная сетка с постраничной подгрузкой и безопасным блюром NSFW (Q/E)
-- Удобная постраничная навигация (Prev/Next) и наглядный счётчик страниц (HUD)
-- Детальная карточка: панорамирование/масштабирование, копирование тегов/ссылок, загрузка изображения
-- Прогрессивная подмена превью на более детальные версии, устойчивый лоадер картинок
-- Настройки macOS: ввод Danbooru API key/username, управление дисковым кешем изображений
-- Комментарии с предпросмотром Markdown/BBCode, пагинацией и быстрым обновлением
-- Ненавязчивые тосты об ошибках и Retry
+- Поиск по тегам и рейтингам (`rating:E/Q/S/G`)
+- История и избранные запросы
+- Адаптивная сетка с постраничной навигацией
+- Просмотр и управление изображениями (панорама, масштабирование, сохранение)
+- Комментарии к постам
+- Синхронизация с API Danbooru через ключ доступа
 
-## Архитектура
+## Запуск
 
-Проект следует принципам Clean Architecture (слои сверху вниз):
-
-- Presentation (SwiftUI): экраны, навигация, стейт (`SearchState`)
-- Domain: (зарезервировано) — юзкейсы/интеракторы; логика постепенно выносится из UI
-- Data: `DanbooruClient` (HTTP, async/await), репозитории (`PostsRepository`)
-
-Технологии:
-
-- Swift 6.2, SwiftUI, Concurrency (async/await)
-- Сеть: `URLSession`, JSONDecoder (устойчивый ISO8601 разбор с/без миллисекунд)
-- Изображения: собственный лёгкий загрузчик + `NSCache` + `URLCache` (планируется Nuke/DataCache)
-  - Гибкий дисковый кеш с управлением лимитом в настройках, прогрессивные апгрейды превью→large
-- Логирование: стандартные принты (планируется `os.Logger` + `os_signpost`)
-- DI: лёгкий через `Environment` (в процессе)
-- Тесты: XCTest (юнит/базовые UI)
-
-Папки:
-
-- `Macbooru/Models` — модели (`Post`, `SearchState`, `SavedSearch`, `RecentSearch`, `Tag`)
-- `Macbooru/Networking` — клиент, лоадер изображений, URL-хелперы
-- `Macbooru/Repositories` — интерфейсы и реализации репозиториев
-- `Macbooru/Views` — SwiftUI‑экраны (Sidebar, Grid, Post detail)
-- `MacbooruTests`, `MacbooruUITests` — тесты
-- `docs/` — архитектура/roadmap/API coverage (локально игнорируется в .gitignore)
-
-## Сборка и запуск
-
-Вариант 1 — Xcode (рекомендуется):
-
-1. Откройте `Macbooru.xcodeproj`
-2. Выберите схему `Macbooru`
-3. Product → Run (⌘R)
-
-Вариант 2 — командная строка (если настроен `xcode-select` на Xcode):
-
-```bash
-# Список схем
-xcodebuild -list -project Macbooru.xcodeproj
-
-# Сборка
-xcodebuild -scheme Macbooru -project Macbooru.xcodeproj -destination 'platform=macOS' build
-
-# Тесты
-xcodebuild -scheme Macbooru -project Macbooru.xcodeproj -destination 'platform=macOS' test
-```
-
-## Тесты
-
-- Юнит‑тесты: `MacbooruTests` (пример: декодирование `Post`, сборка URL)
-- UI‑тесты: `MacbooruUITests` (запуск приложения, проверка базовых сценариев)
-
-Запуск в Xcode: Product → Test (⌘U)
+Откройте `Macbooru.xcodeproj` в Xcode и нажмите Product → Run (⌘R)
 
 ## Конфигурация и секреты
 
@@ -109,20 +47,6 @@ xcodebuild -scheme Macbooru -project Macbooru.xcodeproj -destination 'platform=m
 - В настройках сайдбара есть переключатель «Blur NSFW (Q/E)» — включён по умолчанию.
 - Для `rating: q` и `rating: e` применяется повышенный блюр и затемнение.
 - Иконка `eye.slash` поверх подчёркивает скрытый контент.
-
-## Известные ограничения / TODO
-
-- Нет экрана логина и хранения API ключа в Keychain (планируется Preferences + Keychain)
-- Нет избранного/голосований/комментариев/пулов/тегов
-- Nuke/DataCache в планах (сейчас — свой лёгкий лоадер + NSCache/URLCache)
-- Нет локализаций ru/en (пока строки зашиты в коде)
-- Большее покрытие тестами, SwiftLint/SwiftFormat — в планах
-
-Актуализация:
-
-- Экран настроек с вводом API key/username и хранением в Keychain — реализован
-- Фавориты, голосования, чтение/создание комментариев — реализовано (требует API key)
-- Реализована бесконечная прокрутка с ограничением памяти (sliding window)
 
 ## Вклад в проект
 
