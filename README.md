@@ -8,65 +8,45 @@
 
 <img src="Macbooru/Assets.xcassets/MacbooruAppIcon-iOS-Default-1024x1024@1x.png" alt="Macbooru icon" width="140" height="140" style="border-radius:20px" />
 
-Нативный клиент Danbooru для macOS
+Native Danbooru client for macOS
 
-<sub>Требует macOS 15+ (Sequoia)</sub>
+<sub>Requires macOS 15+ (Sequoia)</sub>
 
 </div>
 
-## Скриншоты
+## Screenshots
 
 <div align="center">
 
-<img src="docs/images/Macbooru-1.png" alt="Главный экран" width="900" />
-<img src="docs/images/Macbooru-2.png" alt="Карточка поста" width="900" />
+<img src="docs/images/Macbooru-1.png" alt="Main screen" width="900" />
+<img src="docs/images/Macbooru-2.png" alt="Post view" width="900" />
 
 </div>
 
-## Возможности
+## Features
 
-- Поиск по тегам и рейтингам (`rating:E/Q/S/G`)
-- История и избранные запросы
-- Адаптивная сетка с постраничной навигацией
-- Просмотр и управление изображениями (панорама, масштабирование, сохранение)
-- Комментарии к постам
-- Синхронизация с API Danbooru через ключ доступа
+* Tag and rating search (`rating:E/Q/S/G`)
+* History and favorite searches
+* Adaptive grid with pagination
+* Image viewing and management (pan, zoom, save)
+* Post comments
+* Synchronization with the Danbooru API via access key
 
-## Запуск
+## Running
 
-Откройте `Macbooru.xcodeproj` в Xcode и нажмите Product → Run (⌘R)
+Open `Macbooru.xcodeproj` in Xcode and press Product → Run (⌘R)
 
-## Конфигурация и секреты
+## Configuration and Secrets
 
-- Авторизация Danbooru (username + API key) поддерживается: откройте `Macbooru` → `Settings…` (⌘,) и заполните раздел _Danbooru Credentials_. Данные сохраняются в системном Keychain и автоматически проверяются (отображается текущий пользователь или ошибка).
-- Очистка полей и сохранение удаляет значения из Keychain.
-- Соблюдайте ToS Danbooru и учитывайте rate limits.
+* Danbooru authentication (username + API key) is supported: open `Macbooru` → `Settings…` (⌘,) and fill in the *Danbooru Credentials* section. Data is stored in the system Keychain and verified automatically (current user or error is shown).
+* Clearing the fields and saving removes the values from the Keychain.
+* Follow Danbooru ToS and consider rate limits.
 
-## Безопасность контента (NSFW)
+## Content Safety (NSFW)
 
-- В настройках сайдбара есть переключатель «Blur NSFW (Q/E)» — включён по умолчанию.
-- Для `rating: q` и `rating: e` применяется повышенный блюр и затемнение.
-- Иконка `eye.slash` поверх подчёркивает скрытый контент.
+* The sidebar settings include a “Blur NSFW (Q/E)” toggle — enabled by default.
+* Increased blur and dimming are applied to `rating: q` and `rating: e`.
 
-## Вклад в проект
+## License
 
-Мы рады PR’ам:
-
-- Разбивайте изменения на небольшие PR
-- Пишите тесты для публичного поведения
-- Соблюдайте стиль Swift 6.x; SwiftLint/SwiftFormat — опционально
-
-Советы по разработке:
-
-- Держите зависимости «сверху вниз»: UI → Domain → Data
-- Выносите логику в use cases/репозитории, UI — максимально декларативный
-- Для сетевых изменений добавляйте юнит‑тесты формирования запросов и декодеров
-
-## Лицензия
-
-TBD
-
-## Благодарности
-
-- Danbooru за открытый JSON API
-- Сообществу SwiftUI за многочисленные примеры и библиотеки (Nuke и др.)
+MIT
