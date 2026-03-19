@@ -4,9 +4,13 @@ import SwiftUI
 import os
 
 #if os(macOS)
-    import AppKit
+    @preconcurrency import AppKit
     import ImageIO
     public typealias PlatformImage = NSImage
+
+    private struct MainActorDecodedImage: @unchecked Sendable {
+        let value: NSImage
+    }
 #else
     import UIKit
     public typealias PlatformImage = UIImage
@@ -228,14 +232,14 @@ final class ThrottledImageLoader {
 
     private func decodeImage(data: Data) async throws -> PlatformImage {
         #if os(macOS)
-            let image: NSImage? = await MainActor.run {
+            let wrappedImage: MainActorDecodedImage? = await MainActor.run {
                 if let rep = NSBitmapImageRep(data: data) {
                     let size = NSSize(width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
                     rep.size = size
                     let image = NSImage(size: size)
                     image.addRepresentation(rep)
                     image.isTemplate = false
-                    return image
+                    return MainActorDecodedImage(value: image)
                 }
                 if let src = CGImageSourceCreateWithData(data as CFData, nil),
                     let cg = CGImageSourceCreateImageAtIndex(
@@ -244,7 +248,7 @@ final class ThrottledImageLoader {
                     let size = NSSize(width: cg.width, height: cg.height)
                     let image = NSImage(cgImage: cg, size: size)
                     image.isTemplate = false
-                    return image
+                    return MainActorDecodedImage(value: image)
                 }
                 if let image = NSImage(data: data) {
                     if image.size == .zero,
@@ -253,11 +257,11 @@ final class ThrottledImageLoader {
                         image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
                     }
                     image.isTemplate = false
-                    return image
+                    return MainActorDecodedImage(value: image)
                 }
                 return nil
             }
-            guard let image else { throw URLError(.cannotDecodeContentData) }
+            guard let image = wrappedImage?.value else { throw URLError(.cannotDecodeContentData) }
             logger.debug(
                 "Decoded image (macOS) \(Int(image.size.width))x\(Int(image.size.height))"
             )

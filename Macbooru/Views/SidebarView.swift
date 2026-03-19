@@ -7,7 +7,6 @@ import SwiftUI
 
 struct SidebarView: View {
     @ObservedObject var state: SearchState
-    var onSearch: (() -> Void)?
     @Environment(\.appDependencies) private var dependencies
     @AppStorage("settings.showKeyboardHints") private var showKeyboardHints: Bool = true
     private let savedStore = SavedSearchStore()
@@ -106,7 +105,6 @@ struct SidebarView: View {
                                         query: q, rating: state.rating, sort: state.sort)
                                     refreshRecent()
                                 }
-                                onSearch?()
                             } label: {
                                 HStack(spacing: 6) {
                                     Image(systemName: "magnifyingglass")
@@ -157,7 +155,13 @@ struct SidebarView: View {
                         }
                         #if os(macOS)
                             if showKeyboardHints {
-                                Text("Enter: search • ↑/↓: navigate • Tab/Enter: apply suggestion")
+                                Group {
+                                    if #available(macOS 14.0, *) {
+                                        Text("Enter: search • ↑/↓: navigate • Tab/Enter: apply suggestion")
+                                    } else {
+                                        Text("Enter: search")
+                                    }
+                                }
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -176,24 +180,21 @@ struct SidebarView: View {
                                 guard state.pageSize != 15 else { return }
                                 state.pageSize = 15
                                 state.resetForNewSearch()
-                                onSearch?()
                             },
                             setPageSize30: {
                                 guard state.pageSize != 30 else { return }
                                 state.pageSize = 30
                                 state.resetForNewSearch()
-                                onSearch?()
                             },
                             setPageSize60: {
                                 guard state.pageSize != 60 else { return }
                                 state.pageSize = 60
                                 state.resetForNewSearch()
-                                onSearch?()
                             }
                         )
                     )
 
-                    .onChange(of: state.tags) { _, newValue in
+                    .onChangeCompat(of: state.tags) { newValue in
                         scheduleAutocomplete(for: newValue)
                     }
                     .onSubmit {
@@ -205,49 +206,29 @@ struct SidebarView: View {
                             recentStore.addOrTouch(query: q, rating: state.rating, sort: state.sort)
                             refreshRecent()
                         }
-                        onSearch?()
                     }
                     .focused($isSearchFocused)
-                    .onChange(of: isSearchFocused) { _, newFocused in
+                    .onChangeCompat(of: isSearchFocused) { newFocused in
                         if !newFocused { suggestions.removeAll() }
                     }
                     // Закрытие по Esc
                     #if os(macOS)
                         .onExitCommand { suggestions.removeAll() }
-                        // Навигация стрелками и выбор Enter (macOS 14+)
-                        .onKeyPress(.downArrow) {
-                            if suggestions.isEmpty {
-                                let token = lastToken(in: state.tags)
-                                if token.count >= 2 {
+                        .modifier(
+                            SearchFieldKeyPressModifier(
+                                suggestions: $suggestions,
+                                selectedIndex: $selectedIndex,
+                                currentTags: { state.tags },
+                                lastToken: { input in lastToken(in: input) },
+                                loadSuggestions: { token in
                                     startSuggestionsRequest(prefix: token)
-                                }
-                                selectedIndex = 0
-                                return .handled
-                            } else {
-                                moveSelection(1)
-                                return .handled
-                            }
-                        }
-                        // Enter = принять выделенную подсказку (если она есть) и добавить пробел; иначе — отдать .onSubmit()
-                        .onKeyPress(.return) {
-                            if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex) {
-                                insertTag(suggestions[selectedIndex].name, trailingSpace: true)
-                                return .handled
-                            }
-                            return .ignored
-                        }
-                        .onKeyPress(.upArrow) {
-                            moveSelection(-1)
-                            return .handled
-                        }
-                        // Tab = принять подсказку
-                        .onKeyPress(.tab) {
-                            if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex) {
-                                insertTag(suggestions[selectedIndex].name)
-                                return .handled
-                            }
-                            return .ignored
-                        }
+                                },
+                                insertTag: { name, trailingSpace in
+                                    insertTag(name, trailingSpace: trailingSpace)
+                                },
+                                moveSelection: { delta in moveSelection(delta) }
+                            )
+                        )
                     #endif
                     // Размещение подсказок: на macOS используем popover, чтобы список не перекрывал поле и не «улетал»
                     #if os(macOS)
@@ -445,7 +426,6 @@ struct SidebarView: View {
                                     if state.sort != m {
                                         state.sort = m
                                         state.resetForNewSearch()
-                                        onSearch?()
                                     }
                                 } label: {
                                     Text(m.label)
@@ -476,9 +456,8 @@ struct SidebarView: View {
                             .textFieldStyle(.roundedBorder)
                             .onSubmit {
                                 state.resetForNewSearch()
-                                onSearch?()
                             }
-                            .onChange(of: state.poolID) { _, _ in
+                            .onChangeCompat(of: state.poolID) { _ in
                                 // не триггерим сразу поиск, чтобы не дёргать API при наборе — пользователь нажмёт Enter/кнопку
                             }
                     }
@@ -532,9 +511,8 @@ struct SidebarView: View {
                         .pickerStyle(.segmented)
                         .controlSize(.small)
                         .labelsHidden()
-                        .onChange(of: state.pageSize) { _, _ in
+                        .onChangeCompat(of: state.pageSize) { _ in
                             state.resetForNewSearch()
-                            onSearch?()
                         }
                     }
                     // Перенесено в Settings: Infinite Scroll и Low Performance
@@ -570,19 +548,16 @@ struct SidebarView: View {
                     guard state.pageSize != 15 else { return }
                     state.pageSize = 15
                     state.resetForNewSearch()
-                    onSearch?()
                 },
                 setPageSize30: {
                     guard state.pageSize != 30 else { return }
                     state.pageSize = 30
                     state.resetForNewSearch()
-                    onSearch?()
                 },
                 setPageSize60: {
                     guard state.pageSize != 60 else { return }
                     state.pageSize = 60
                     state.resetForNewSearch()
-                    onSearch?()
                 }
             ))
     }
@@ -595,7 +570,6 @@ extension SidebarView {
         state.rating = .any
         state.sort = .recent
         state.resetForNewSearch()
-        onSearch?()
         // Вернём фокус в поле ввода для продолжения работы
         #if os(macOS)
             isSearchFocused = true
@@ -683,6 +657,58 @@ extension SidebarView {
         if newIndex != selectedIndex { selectedIndex = newIndex }
     }
 }
+
+#if os(macOS)
+    private struct SearchFieldKeyPressModifier: ViewModifier {
+        @Binding var suggestions: [Tag]
+        @Binding var selectedIndex: Int
+        let currentTags: () -> String
+        let lastToken: (String) -> String
+        let loadSuggestions: (String) -> Void
+        let insertTag: (String, Bool) -> Void
+        let moveSelection: (Int) -> Void
+
+        @ViewBuilder
+        func body(content: Content) -> some View {
+            if #available(macOS 14.0, *) {
+                content
+                    .onKeyPress(.downArrow) {
+                        if suggestions.isEmpty {
+                            let token = lastToken(currentTags())
+                            if token.count >= 2 {
+                                loadSuggestions(token)
+                            }
+                            selectedIndex = 0
+                            return .handled
+                        } else {
+                            moveSelection(1)
+                            return .handled
+                        }
+                    }
+                    .onKeyPress(.return) {
+                        if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex) {
+                            insertTag(suggestions[selectedIndex].name, true)
+                            return .handled
+                        }
+                        return .ignored
+                    }
+                    .onKeyPress(.upArrow) {
+                        moveSelection(-1)
+                        return .handled
+                    }
+                    .onKeyPress(.tab) {
+                        if !suggestions.isEmpty, suggestions.indices.contains(selectedIndex) {
+                            insertTag(suggestions[selectedIndex].name, false)
+                            return .handled
+                        }
+                        return .ignored
+                    }
+            } else {
+                content
+            }
+        }
+    }
+#endif
 
 // Compact suggest list UI
 // Современные компоненты чипов
@@ -787,61 +813,6 @@ private struct ModernRecentChip: View {
     }
 }
 
-private struct SavedChip: View {
-    let item: SavedSearch
-    var action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if item.pinned { Image(systemName: "pin.fill").font(.caption2) }
-                Text(label)
-                    .font(.caption)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill(.thinMaterial)
-            )
-        }
-        .buttonStyle(.plain)
-        .help(label)
-    }
-    private var label: String {
-        if item.rating == .any { return item.query }
-        return "\(item.rating.display) · \(item.query)"
-    }
-}
-
-private struct RecentChip: View {
-    let item: RecentSearch
-    var action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: "clock.arrow.circlepath").font(.caption2)
-                Text(label)
-                    .font(.caption)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                Capsule().fill(.thinMaterial)
-            )
-        }
-        .buttonStyle(.plain)
-        .help(label)
-    }
-    private var label: String {
-        var parts: [String] = []
-        if item.rating != .any { parts.append(item.rating.display) }
-        if let s = item.sort { parts.append(s.label) }
-        parts.append(item.query)
-        return parts.joined(separator: " · ")
-    }
-}
-
 // Saved logic
 extension SidebarView {
     fileprivate func refreshSaved() {
@@ -860,7 +831,6 @@ extension SidebarView {
         state.resetForNewSearch()
         savedStore.touch(id: item.id)
         refreshSaved()
-        onSearch?()
     }
     fileprivate func togglePin(_ item: SavedSearch) {
         savedStore.togglePin(id: item.id)
@@ -883,7 +853,6 @@ extension SidebarView {
         recentStore.addOrTouch(
             query: item.query, rating: item.rating, sort: item.sort ?? state.sort)
         refreshRecent()
-        onSearch?()
     }
 }
 private struct SuggestList: View {
@@ -926,7 +895,7 @@ private struct SuggestList: View {
                         if idx < items.count - 1 { Divider() }
                     }
                 }
-                .onChange(of: selectedIndex) { _, newValue in
+                .onChangeCompat(of: selectedIndex) { newValue in
                     withAnimation(.easeInOut(duration: 0.12)) {
                         proxy.scrollTo(newValue, anchor: .center)
                     }

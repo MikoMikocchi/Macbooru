@@ -41,7 +41,7 @@ struct ZoomableImageView<Content: View>: View {
         content
             .scaleEffect(zoom)
             .offset(offset)
-            .onChange(of: zoom) { _, _ in
+            .onChangeCompat(of: zoom) { _ in
                 offset = clampedOffset(
                     offset,
                     containerSize: containerSize,
@@ -309,4 +309,3 @@ final class PanZoomNSView: NSView {
     }
 }
 #endif
-

@@ -5,7 +5,6 @@
 //  Created by Михаил Мацкевич on 29.09.2025.
 //
 
-import SwiftData
 import SwiftUI
 
 #if os(macOS)
@@ -117,7 +116,6 @@ struct PostGridView: View {
             columns: columns,
             gridSpacing: gridSpacing,
             isLoading: isLoading || isLoadingMore,
-            layout: search.layout,
             infiniteEnabled: search.infiniteScrollEnabled,
             onReachedEnd: {
                 guard search.infiniteScrollEnabled else { return }
@@ -142,10 +140,10 @@ struct PostGridView: View {
             guard autoRefreshOnLaunch else { return }
             await load(page: 1, replace: true)
         }
-        .onChange(of: search.tileSize) { _, _ in
+        .onChangeCompat(of: search.tileSize) { _ in
             recomputeColumns()
         }
-        .onChange(of: search.searchTrigger) { _, _ in
+        .onChangeCompat(of: search.searchTrigger) { _ in
             knownMaxPage = nil
             originPage = nil
             showBackToOrigin = false
@@ -481,7 +479,6 @@ private struct PostsGridScroll: View {
     let columns: [GridItem]
     let gridSpacing: CGFloat
     let isLoading: Bool
-    let layout: SearchState.LayoutMode
     let infiniteEnabled: Bool
     var onReachedEnd: (() -> Void)? = nil
 
@@ -601,7 +598,7 @@ private struct ErrorToast: View {
                 retry()
             }
             .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
+            .modifier(CapsuleBorderShapeIfAvailable())
             .controlSize(.small)
         }
         .padding(.horizontal, 16)
@@ -668,10 +665,7 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     var body: some View {
         NavigationSplitView {
-            SidebarView(state: search) {
-                // запуск поиска
-                Task { await resetAndSearch() }
-            }
+            SidebarView(state: search)
             .frame(minWidth: 260, maxWidth: 320)
         } detail: {
             NavigationStack {
@@ -684,15 +678,6 @@ struct ContentView: View {
         }
         .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
         .background(Theme.Gradients.appBackground(for: colorScheme).ignoresSafeArea())
-    }
-
-    @MainActor
-    private func resetAndSearch() async {
-        // сброс грида и загрузка первой страницы под новый запрос
-        // фактическая очистка в PostGridView происходит по refresh()
-        // здесь просто увеличим page и дадим сигнал обновиться
-        // (упрощённо — можно сделать через ObservableObject/Publisher позже)
-        // Ничего не делаем здесь, так как PostGridView сам вызывает .task { load(page:1) }
     }
 }
 
@@ -714,5 +699,15 @@ private struct AnimatedItemModifier: ViewModifier {
                     hasAppeared = true
                 }
             }
+    }
+}
+
+private struct CapsuleBorderShapeIfAvailable: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.buttonBorderShape(.capsule)
+        } else {
+            content
+        }
     }
 }

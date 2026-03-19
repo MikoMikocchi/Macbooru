@@ -93,13 +93,6 @@ final class SearchState: ObservableObject {
     @Published var infiniteScrollEnabled: Bool = false
     // Pool search (optional). If set to a valid number, adds `pool:ID` to query
     @Published var poolID: String = ""
-    // Layout mode: grid (default) or list (single column grid)
-    enum LayoutMode: String, CaseIterable, Identifiable {
-        case grid, list
-        var id: String { rawValue }
-        var label: String { rawValue.capitalized }
-    }
-    @Published var layout: LayoutMode = .grid
 
     init(defaults: UserDefaults = .standard) {
         if let persistedDefault = defaults.object(forKey: "settings.blurSensitiveDefault") as? Bool

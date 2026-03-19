@@ -66,7 +66,7 @@ struct SettingsView: View {
         }
         .onAppear(perform: loadFromStore)
         .onAppear(perform: loadCacheSettings)
-        .onChange(of: blurSensitiveDefault) { _, newValue in
+        .onChangeCompat(of: blurSensitiveDefault) { newValue in
             search.blurSensitive = newValue
         }
     }

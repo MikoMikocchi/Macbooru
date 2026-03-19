@@ -405,7 +405,7 @@ struct PostDetailView: View {
             }
             viewModel.hasCredentials = dependenciesStore.hasCredentials
         }
-        .onChange(of: dependenciesStore.credentials) { _ in
+        .onChangeCompat(of: dependenciesStore.credentials) { _ in
             viewModel.hasCredentials = dependenciesStore.hasCredentials
         }
         .onReceive(dependenciesStore.$dependencies) { newDependencies in
