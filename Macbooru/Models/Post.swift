@@ -5,7 +5,7 @@ struct Post: Identifiable, Codable, Hashable {
     let createdAt: Date?
     let rating: String?
     let tagString: String?
-    // Отдельные группы тегов от Danbooru (если приходят в ответе)
+    
     let tagStringArtist: String?
     let tagStringCopyright: String?
     let tagStringCharacter: String?
@@ -23,12 +23,12 @@ struct Post: Identifiable, Codable, Hashable {
     let upScore: Int?
     let downScore: Int?
 
-    // Удобные URL, автоматически дополняющие относительные пути хостом Danbooru
+    
     var fileURL: URL? { URL.makeDanbooruURL(fileUrl) }
     var previewURL: URL? { URL.makeDanbooruURL(previewFileUrl) }
     var largeURL: URL? { URL.makeDanbooruURL(largeFileUrl) }
 
-    // Удобные разбиения по группам
+    
     var tagsArtist: [String] { Post.split(tagStringArtist) }
     var tagsCopyright: [String] { Post.split(tagStringCopyright) }
     var tagsCharacter: [String] { Post.split(tagStringCharacter) }

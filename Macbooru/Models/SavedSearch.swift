@@ -2,10 +2,10 @@ import Foundation
 
 struct SavedSearch: Codable, Identifiable, Hashable {
     var id: UUID
-    var query: String  // строка тегов (без rating)
-    var rating: Rating  // выбранный рейтинг
-    var sort: SortMode?  // опционально: сохранённая сортировка
-    var pinned: Bool  // закреплён
+    var query: String  
+    var rating: Rating  
+    var sort: SortMode?  
+    var pinned: Bool  
     var createdAt: Date
     var lastUsedAt: Date
 
@@ -79,7 +79,7 @@ final class SavedSearchStore {
     }
 
     private func save(_ items: [SavedSearch]) {
-        // Сортируем и ограничиваем: pinned вне лимита, неприкреплённые — до 20
+        
         let sorted = sort(items)
         let pinned = sorted.filter { $0.pinned }
         let others = sorted.filter { !$0.pinned }

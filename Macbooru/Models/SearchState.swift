@@ -26,13 +26,13 @@ enum Rating: String, CaseIterable, Identifiable, Codable, Hashable {
 }
 
 enum SortMode: String, CaseIterable, Identifiable, Codable, Hashable {
-    case recent  // по умолчанию (без order)
+    case recent  
     case newest  // order:id_desc
     case oldest  // order:id_asc
-    case rank  // order:rank (популярное/трендовое)
+    case rank  
     case score  // order:score
     case favs  // order:favcount
-    case random  // order:random (может игнорировать другие фильтры)
+    case random  
 
     var id: String { rawValue }
     var label: String {
@@ -103,7 +103,7 @@ final class SearchState: ObservableObject {
         }
     }
 
-    // составной запрос для Danbooru: rating:*, затем пользовательские теги
+    
     var danbooruQuery: String? {
         let poolTag: String? = {
             let trimmed = poolID.trimmingCharacters(in: .whitespacesAndNewlines)

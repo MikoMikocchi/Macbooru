@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Простой flow layout для чипов в сайдбаре (переименован, чтобы не конфликтовать с другими реализациями)
+
 struct ChipsFlowLayout: Layout {
     var spacing: CGFloat = 8
     var rowSpacing: CGFloat = 8
@@ -15,7 +15,7 @@ struct ChipsFlowLayout: Layout {
         for sub in subviews {
             let size = sub.sizeThatFits(ProposedViewSize(width: nil, height: nil))
             if currentRowWidth > 0 && currentRowWidth + spacing + size.width > maxWidth {
-                // перенос строки
+                
                 totalHeight += currentRowHeight + rowSpacing
                 maxLineWidth = max(maxLineWidth, currentRowWidth)
                 currentRowWidth = 0
@@ -41,7 +41,7 @@ struct ChipsFlowLayout: Layout {
         for sub in subviews {
             let size = sub.sizeThatFits(ProposedViewSize(width: nil, height: nil))
             if x != bounds.minX && x + spacing + size.width > bounds.maxX {
-                // перенос строки
+                
                 x = bounds.minX
                 y += rowHeight + rowSpacing
                 rowHeight = 0

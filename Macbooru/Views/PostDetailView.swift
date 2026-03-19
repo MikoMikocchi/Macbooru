@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Types Post и RemoteImage должны быть в том же таргете. Импорт доп. модулей не требуется.
+
 
 #if os(macOS)
     import AppKit
@@ -16,7 +16,7 @@ struct PostDetailView: View {
 
     @StateObject private var viewModel: PostDetailViewModel
 
-    // Зум и панорамирование (UI state)
+    
     @State private var zoom: CGFloat = 1.0
     @State private var lastZoom: CGFloat = 1.0
     @State private var offset: CGSize = .zero
@@ -194,7 +194,7 @@ struct PostDetailView: View {
         VStack(alignment: .leading, spacing: stackSpacing) {
             ZStack(alignment: .topTrailing) {
                 GeometryReader { proxy in
-                    // Высота зоны просмотра арта ограничена, чтобы всё умещалось на одном экране
+                    
                     let h = max(420.0, min(proxy.size.height, maxHeight))
                     let aspect: CGFloat? = {
                         if let w = post.width, let h = post.height, w > 0, h > 0 {
@@ -263,8 +263,8 @@ struct PostDetailView: View {
                     )
                 }
                 .padding(10)
-                // Материал и подложка теперь строго внутри закруглённой формы —
-                // устраняем «квадратную» подложку позади панели
+                
+                
                 .background(
                     Theme.ColorPalette.controlBackground,
                     in: RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -331,7 +331,7 @@ struct PostDetailView: View {
     var body: some View {
         GeometryReader { proxy in
             let isCompact = proxy.size.width < 900
-            // Ещё немного уменьшаем резерв, чтобы подтянуть интерфейс к нижней границе окна
+            
             let reserved: CGFloat = isCompact ? 160 : 180
             let imageMaxHeight = max(420, proxy.size.height - reserved)
             ScrollView(showsIndicators: false) {
@@ -442,16 +442,16 @@ struct PostDetailView: View {
         #endif
     }
 
-    // ЛКМ: начать поиск по тегу внутри приложения и закрыть детальный экран
+    
     private func openSearchInApp(_ tag: String) {
-        // Заменяем текущий запрос ровно на один выбранный тег
+        
         let token = tag.replacingOccurrences(of: " ", with: "_")
         search.tags = token
         search.resetForNewSearch()
         dismiss()
     }
 
-    // ПКМ: скопировать конкретный тег и показать явный тост
+    
     private func copySingleTag(_ tag: String) {
         #if os(macOS)
             let pb = NSPasteboard.general
@@ -504,12 +504,12 @@ struct PostDetailView: View {
         #endif
     }
 
-    // MARK: - Контекстное меню по арту (macOS)
+    
     #if os(macOS)
         private func makeArtContextMenu() -> NSMenu {
             let menu = NSMenu()
 
-            // Зум
+            
             menu.addItem(
                 withTitle: "Fit", action: #selector(MenuActionTarget.fit), keyEquivalent: "f")
             menu.addItem(
@@ -520,12 +520,12 @@ struct PostDetailView: View {
                 keyEquivalent: "-")
             menu.addItem(NSMenuItem.separator())
 
-            // Позиционирование
+            
             menu.addItem(
                 withTitle: "Center", action: #selector(MenuActionTarget.center), keyEquivalent: "")
             menu.addItem(NSMenuItem.separator())
 
-            // Открыть
+            
             let openPost = NSMenuItem(
                 title: "Open Post Page", action: #selector(MenuActionTarget.openPostPage),
                 keyEquivalent: "")
@@ -544,7 +544,7 @@ struct PostDetailView: View {
             }
             menu.addItem(NSMenuItem.separator())
 
-            // Буфер/загрузка
+            
             menu.addItem(
                 NSMenuItem(
                     title: "Copy Tags", action: #selector(MenuActionTarget.copyTags),
@@ -585,7 +585,7 @@ struct PostDetailView: View {
                     action: #selector(MenuActionTarget.revealDownloadsFolder),
                     keyEquivalent: ""))
 
-            // Таргет для действий
+            
             let target = MenuActionTarget(
                 fitAction: { resetZoom() },
                 zoomInAction: { stepZoom(in: +1) },
@@ -602,11 +602,11 @@ struct PostDetailView: View {
                 downloadAction: { Task { await viewModel.downloadBestImage() } },
                 revealDownloadsFolderAction: { revealDownloadsFolder() }
             )
-            // Назначаем целевой объект меню и действию
+            
             for item in menu.items where item.action != nil {
                 item.target = target
             }
-            // Удерживаем target живым до закрытия меню
+            
             objc_setAssociatedObject(
                 menu, &MenuActionTarget.associatedKey, target, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 

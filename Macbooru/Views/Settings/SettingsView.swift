@@ -417,7 +417,7 @@ private struct StatusBanner: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .background(
-            // Клипуем материал формой, чтобы не было "квадратной" подложки
+            
             tint.opacity(0.12),
             in: RoundedRectangle(cornerRadius: 16, style: .continuous)
         )

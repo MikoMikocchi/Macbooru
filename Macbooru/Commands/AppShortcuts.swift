@@ -1,13 +1,13 @@
 import SwiftUI
 
-// Контекстные действия для грида (страницы/обновление)
+
 struct GridActions {
     var prev: (() -> Void)?
     var next: (() -> Void)?
     var refresh: (() -> Void)?
 }
 
-// Контекстные действия для поиска (фокус/размер страницы)
+
 struct SearchActions {
     var focusSearch: (() -> Void)?
     var setPageSize15: (() -> Void)?

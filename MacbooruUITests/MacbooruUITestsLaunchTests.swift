@@ -2,7 +2,7 @@
 //  MacbooruUITestsLaunchTests.swift
 //  MacbooruUITests
 //
-//  Created by Михаил Мацкевич on 29.09.2025.
+
 //
 
 import XCTest

@@ -14,21 +14,21 @@ struct SidebarView: View {
     @State private var tagQuery: String = ""
     @State private var suggestions: [Tag] = []
     @State private var isLoadingSuggest = false
-    // Дебаунс и фокус
+    
     @State private var debounceTask: Task<Void, Never>? = nil
     @State private var suggestionsTask: Task<Void, Never>? = nil
     @State private var suggestionsRequestID: Int = 0
     @FocusState private var isSearchFocused: Bool
-    // Клавиатура/хайлайт
+    
     @State private var selectedIndex: Int = 0
-    // Управление поповером через вычисляемый биндинг: открыт только когда есть подсказки
+    
     @State private var saved: [SavedSearch] = []
     @AppStorage("sidebar.savedExpanded") private var isSavedExpanded: Bool = false
     @State private var recent: [RecentSearch] = []
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            // Фон-материал тянем под титлбар, чтобы не было «ступеньки»
+            
             #if os(macOS)
                 VisualEffectView(
                     material: .sidebar, blendingMode: .withinWindow,
@@ -42,7 +42,7 @@ struct SidebarView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Современный заголовок
+                    
                     HStack(spacing: 12) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -66,7 +66,7 @@ struct SidebarView: View {
                         Spacer()
                     }
 
-                    // Поле поиска с современным дизайном
+                    
                     VStack(spacing: 12) {
                         TextField("Enter tags…", text: $state.tags)
                             .textFieldStyle(.plain)
@@ -93,10 +93,10 @@ struct SidebarView: View {
                                 }
                             }
 
-                        // Кнопки действий (переносим Search сюда)
+                        
                         HStack(spacing: 8) {
                             Button {
-                                // Выполнить поиск
+                                
                                 suggestions.removeAll()
                                 state.resetForNewSearch()
                                 let q = state.tags.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -167,7 +167,7 @@ struct SidebarView: View {
                             }
                         #endif
                     }
-                    // Делаем команды доступными через focusedSceneValue
+                    
                     .focusedSceneValue(
                         \.searchActions,
                         SearchActions(
@@ -198,7 +198,7 @@ struct SidebarView: View {
                         scheduleAutocomplete(for: newValue)
                     }
                     .onSubmit {
-                        // Enter = выполнить поиск по текущему вводу
+                        
                         suggestions.removeAll()
                         state.resetForNewSearch()
                         let q = state.tags.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -211,7 +211,7 @@ struct SidebarView: View {
                     .onChangeCompat(of: isSearchFocused) { newFocused in
                         if !newFocused { suggestions.removeAll() }
                     }
-                    // Закрытие по Esc
+                    
                     #if os(macOS)
                         .onExitCommand { suggestions.removeAll() }
                         .modifier(
@@ -230,7 +230,7 @@ struct SidebarView: View {
                             )
                         )
                     #endif
-                    // Размещение подсказок: на macOS используем popover, чтобы список не перекрывал поле и не «улетал»
+                    
                     #if os(macOS)
                         .popover(
                             isPresented: Binding(
@@ -250,7 +250,7 @@ struct SidebarView: View {
                             .id(suggestions.count)
                             .frame(minWidth: 260)
                             .frame(maxHeight: 260)
-                            .padding(Edge.Set.top, 6)  // небольшой отступ, чтобы стрелка поповера не «накрывала» первый элемент
+                            .padding(Edge.Set.top, 6)  
                             .padding(Edge.Set.horizontal, 4)
                         }
                     #else
@@ -269,7 +269,7 @@ struct SidebarView: View {
                             }
                         }
                     #endif
-                    // Современная секция сохраненных поисков
+                    
                     if !saved.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 12) {
@@ -348,7 +348,7 @@ struct SidebarView: View {
                                 )
                         )
                     }
-                    // Современная секция недавних поисков
+                    
                     if !recent.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 12) {
@@ -458,10 +458,10 @@ struct SidebarView: View {
                                 state.resetForNewSearch()
                             }
                             .onChangeCompat(of: state.poolID) { _ in
-                                // не триггерим сразу поиск, чтобы не дёргать API при наборе — пользователь нажмёт Enter/кнопку
+                                
                             }
                     }
-                    // Убрали переключатель Layout — используем только Grid
+                    
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "hand.raised.fill").foregroundStyle(.secondary)
@@ -515,12 +515,12 @@ struct SidebarView: View {
                             state.resetForNewSearch()
                         }
                     }
-                    // Перенесено в Settings: Infinite Scroll и Low Performance
+                    
                     Toggle(isOn: $state.blurSensitive) {
                         Label("Blur NSFW (Q/E)", systemImage: "eye.slash")
                     }
                     .toggleStyle(.switch)
-                    // Кнопку Search снизу убрали — она перенесена наверх к полю ввода
+                    
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 12)
@@ -570,7 +570,7 @@ extension SidebarView {
         state.rating = .any
         state.sort = .recent
         state.resetForNewSearch()
-        // Вернём фокус в поле ввода для продолжения работы
+        
         #if os(macOS)
             isSearchFocused = true
         #endif
@@ -584,7 +584,7 @@ extension SidebarView {
             suggestionsTask?.cancel()
             return
         }
-        // Дебаунс: отменяем предыдущую задачу и ждём 250 мс
+        
         debounceTask?.cancel()
         debounceTask = Task { [token] in
             try? await Task.sleep(nanoseconds: 250_000_000)
@@ -596,7 +596,7 @@ extension SidebarView {
     }
 
     fileprivate func lastToken(in input: String) -> String {
-        // Если строка оканчивается пробелом, значит пользователь завершил токен — не подсказываем
+        
         if input.last == " " { return "" }
         return input.split(separator: " ").last.map(String.init) ?? input
     }
@@ -650,7 +650,7 @@ extension SidebarView {
         }
     }
 
-    // Перемещение выделения
+    
     fileprivate func moveSelection(_ delta: Int) {
         guard !suggestions.isEmpty else { return }
         let newIndex = max(0, min(suggestions.count - 1, selectedIndex + delta))
@@ -711,7 +711,7 @@ extension SidebarView {
 #endif
 
 // Compact suggest list UI
-// Современные компоненты чипов
+
 private struct ModernSavedChip: View {
     let item: SavedSearch
     var action: () -> Void
@@ -902,11 +902,11 @@ private struct SuggestList: View {
                 }
             }
         }
-        // Оформление: в popover фон системный, без наших скруглений, чтобы углы не перекрывали контент
+        
         .modifier(SuggestListChrome(inPopover: inPopover))
     }
 
-    // Подсветка совпадений
+    
     private func highlightedText(_ text: String, match: String) -> Text {
         guard !match.isEmpty else { return Text(text) }
         var attr = AttributedString(text)
@@ -925,13 +925,13 @@ private struct SuggestList: View {
     }
 }
 
-// Офорление для списка подсказок, чтобы единообразно переключать вид для popover/overlay
+
 private struct SuggestListChrome: ViewModifier {
     var inPopover: Bool
     func body(content: Content) -> some View {
         #if os(macOS)
             if inPopover {
-                content  // системный поповер сам рисует фон и скругления
+                content  
             } else {
                 content
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
@@ -946,7 +946,7 @@ private struct SuggestListChrome: ViewModifier {
 }
 
 #if os(macOS)
-    // Нативный фон через NSVisualEffectView (material: .sidebar)
+    
     private struct VisualEffectView: NSViewRepresentable {
         var material: NSVisualEffectView.Material
         var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow

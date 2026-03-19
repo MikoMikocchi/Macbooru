@@ -159,7 +159,7 @@ struct ZoomableImageView<Content: View>: View {
         var contentHeight: CGFloat
 
         if let aspect = imageAspectRatio {
-            // Базовая (fit) ширина/высота до применения зума
+            
             let baseWidthFit = min(containerSize.width, contentBaseHeight * aspect)
             let baseHeightFit = min(contentBaseHeight, containerSize.width / aspect)
             contentWidth = baseWidthFit * zoom

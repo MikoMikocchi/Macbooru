@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  Macbooru
 //
-//  Created by Михаил Мацкевич on 29.09.2025.
+
 //
 
 import SwiftUI
@@ -15,7 +15,7 @@ struct PostGridView: View {
     @ObservedObject var search: SearchState
     @Environment(\.appDependencies) private var dependencies
     @AppStorage("settings.autoRefreshOnLaunch") private var autoRefreshOnLaunch: Bool = true
-    // Простая пагинация: единый массив текущей страницы
+    
     @State private var posts: [Post] = []
     @State private var isLoading = false
     @State private var isLoadingMore = false
@@ -94,7 +94,7 @@ struct PostGridView: View {
                             if abs(dx) > 0.5, now - lastTriggerTime > 0.25 {
                                 lastTriggerTime = now
                                 if dx < 0 { onLeft() } else { onRight() }
-                                return nil  // потребляем swipe-жест, но это не блокирует клики
+                                return nil  
                             }
                             return event
                         }
@@ -157,7 +157,7 @@ struct PostGridView: View {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30)
                     .onEnded { value in
-                        // горизонтальный двухпальцевый свайп: влево/вправо, не мешаем вертикальному скроллу
+                        
                         let dx = value.translation.width
                         let dy = value.translation.height
                         guard abs(dx) > 60, abs(dy) < 40 else { return }
@@ -337,7 +337,7 @@ struct PostGridView: View {
             } else {
                 posts.append(contentsOf: next)
             }
-            // hasMore true, если получили полный лимит; иначе достигнут конец
+            
             hasMore = next.count == search.pageSize
             self.search.page = max(1, page)
         } catch is CancellationError {
@@ -404,10 +404,10 @@ struct PostGridView: View {
         return Array(start...end)
     }
 
-    // Поиск последней страницы: экспоненциальный рост и бинарный поиск
+    
     @MainActor
     private func findLastPage() async -> Int? {
-        // быстрый гвард: если текущая страница вернула меньше лимита, она и есть последняя
+        
         if posts.count < search.pageSize { return max(1, search.page) }
 
         let limit = search.pageSize
@@ -427,28 +427,28 @@ struct PostGridView: View {
             }
         }
 
-        // Поиск верхней границы: постепенное расширение окна
+        
         while requests < maxRequests {
             requests += 1
             if let cnt = await fetchCount(high) {
                 if cnt == 0 {
-                    break  // нашли пустую верхнюю границу
+                    break  
                 } else if cnt < limit {
-                    // high неполная — это последняя
+                    
                     return high
                 } else {
                     low = high
-                    high = high + 8  // аккуратно расширяем окно, чтобы не бомбить API
+                    high = high + 8  
                 }
             } else {
                 break
             }
         }
 
-        // Если верхняя граница не найдена, попробуем ещё пару шагов
+        
         if high <= low { high = low + 8 }
 
-        // Бинарный поиск между low..high, чтобы найти последнюю непустую страницу
+        
         var left = low
         var right = high
         var answer = low

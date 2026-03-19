@@ -231,7 +231,7 @@ final class ThrottledImageLoader {
                 let img = try await load(url, maxPixelSize: maxPixelSize)
                 return img
             } catch {
-                // попробуем следующий вариант
+                
                 continue
             }
         }
@@ -375,7 +375,7 @@ struct RemoteImage: View {
             await MainActor.run { isLoading = false }
             return
         }
-        // Прогрессивная загрузка: сначала быстрый превью, затем апгрейд до более крупного
+        
         var firstShownIndex: Int? = nil
         var bestShownPixelCount = 0
         for (idx, url) in candidates.enumerated() {
@@ -387,7 +387,7 @@ struct RemoteImage: View {
                 )
                 if Task.isCancelled { return }
                 let newPixels = pixelCountFor(img)
-                // показать первый успешный вариант
+                
                 if firstShownIndex == nil {
                     firstShownIndex = idx
                     bestShownPixelCount = newPixels
@@ -405,7 +405,7 @@ struct RemoteImage: View {
                         self.isLoading = false
                     }
                     if !animateUpgrades { break }
-                } else if animateUpgrades, newPixels > bestShownPixelCount {  // улучшение — заменить
+                } else if animateUpgrades, newPixels > bestShownPixelCount {  
                     bestShownPixelCount = newPixels
                     await MainActor.run {
                         if Task.isCancelled { return }
@@ -421,11 +421,11 @@ struct RemoteImage: View {
                     }
                 }
             } catch {
-                // просто идем дальше к следующему кандидату
+                
                 continue
             }
         }
-        // если вообще ничего не удалось
+        
         if !Task.isCancelled, firstShownIndex == nil {
             await MainActor.run {
                 self.lastError = URLError(.cannotLoadFromNetwork)
@@ -450,7 +450,7 @@ extension Logger {
         subsystem: subsystemIdentifier, category: "ImageLoader")
 }
 
-// Вспомогательный модификатор для выбора scaledToFit/scaledToFill
+
 private struct Scaled: ViewModifier {
     let contentMode: ContentMode
     func body(content: Content) -> some View {
