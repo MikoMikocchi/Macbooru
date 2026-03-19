@@ -10,7 +10,7 @@
 
 Native Danbooru client for macOS
 
-<sub>Requires macOS 15+ (Sequoia)</sub>
+<sub>Requires macOS 14+ (Sonoma)</sub>
 
 </div>
 

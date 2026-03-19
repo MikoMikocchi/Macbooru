@@ -11,7 +11,6 @@ struct PostDetailView: View {
     let post: Post
     @EnvironmentObject private var search: SearchState
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.appDependencies) private var dependencies
     @EnvironmentObject private var dependenciesStore: AppDependenciesStore
     @Environment(\.colorScheme) private var colorScheme
 
@@ -392,7 +391,7 @@ struct PostDetailView: View {
             }
         }
         .task(id: post.id) {
-            viewModel.inject(dependencies: dependencies)
+            viewModel.inject(dependencies: dependenciesStore.dependencies)
             viewModel.hasCredentials = dependenciesStore.hasCredentials
             viewModel.onAuthenticationFailure = { [weak dependenciesStore] msg in
                 dependenciesStore?.handleAuthenticationFailure(message: msg)
@@ -408,6 +407,9 @@ struct PostDetailView: View {
         }
         .onChange(of: dependenciesStore.credentials) { _ in
             viewModel.hasCredentials = dependenciesStore.hasCredentials
+        }
+        .onReceive(dependenciesStore.$dependencies) { newDependencies in
+            viewModel.inject(dependencies: newDependencies)
         }
     }
 

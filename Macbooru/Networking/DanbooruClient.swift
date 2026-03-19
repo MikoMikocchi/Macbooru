@@ -80,9 +80,14 @@ final class DanbooruClient {
     }
 
     func fetchPosts(tags: String? = nil, page: Int = 1, limit: Int = 20) async throws -> [Post] {
-        var comps = URLComponents(
-            url: config.baseURL.appendingPathComponent("/posts.json"),
-            resolvingAgainstBaseURL: false)!
+        guard
+            var comps = URLComponents(
+                url: config.baseURL.appendingPathComponent("/posts.json"),
+                resolvingAgainstBaseURL: false
+            )
+        else {
+            throw APIError.invalidResponse
+        }
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "page", value: String(page)),
             URLQueryItem(name: "limit", value: String(limit)),
@@ -90,17 +95,15 @@ final class DanbooruClient {
         if let tags, !tags.isEmpty { queryItems.append(URLQueryItem(name: "tags", value: tags)) }
         comps.queryItems = queryItems
 
-        var req = URLRequest(url: comps.url!)
+        guard let url = comps.url else { throw APIError.invalidResponse }
+        var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
         req.timeoutInterval = 30
         logger.debug(
             "GET /posts page=\(page, privacy: .public) limit=\(limit, privacy: .public) tags=\(tags ?? "∅", privacy: .public)"
         )
-        if let user = config.username, let key = config.apiKey {
-            let authString = "\(user):\(key)".data(using: .utf8)!.base64EncodedString()
-            req.setValue("Basic \(authString)", forHTTPHeaderField: "Authorization")
-        }
+        applyOptionalAuth(to: &req)
 
         let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse else { throw APIError.invalidResponse }
@@ -123,24 +126,27 @@ final class DanbooruClient {
 
     func fetchTags(prefix: String, limit: Int = 10) async throws -> [Tag] {
         guard !prefix.isEmpty else { return [] }
-        var comps = URLComponents(
-            url: config.baseURL.appendingPathComponent("/tags.json"), resolvingAgainstBaseURL: false
-        )!
+        guard
+            var comps = URLComponents(
+                url: config.baseURL.appendingPathComponent("/tags.json"),
+                resolvingAgainstBaseURL: false
+            )
+        else {
+            throw APIError.invalidResponse
+        }
         comps.queryItems = [
             URLQueryItem(name: "search[name_matches]", value: prefix + "*"),
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "search[order]", value: "count"),
         ]
-        var req = URLRequest(url: comps.url!)
+        guard let url = comps.url else { throw APIError.invalidResponse }
+        var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
         logger.debug(
             "GET /tags prefix=\(prefix, privacy: .public) limit=\(limit, privacy: .public)"
         )
-        if let user = config.username, let key = config.apiKey {
-            let authString = "\(user):\(key)".data(using: .utf8)!.base64EncodedString()
-            req.setValue("Basic \(authString)", forHTTPHeaderField: "Authorization")
-        }
+        applyOptionalAuth(to: &req)
         let (data, resp) = try await session.data(for: req)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
@@ -209,15 +215,21 @@ final class DanbooruClient {
     }
 
     func fetchComments(postID: Int, page: Int = 1, limit: Int = 40) async throws -> [Comment] {
-        var comps = URLComponents(
-            url: config.baseURL.appendingPathComponent("/comments.json"), resolvingAgainstBaseURL: false
-        )!
+        guard
+            var comps = URLComponents(
+                url: config.baseURL.appendingPathComponent("/comments.json"),
+                resolvingAgainstBaseURL: false
+            )
+        else {
+            throw APIError.invalidResponse
+        }
         comps.queryItems = [
             URLQueryItem(name: "search[post_id]", value: String(postID)),
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "page", value: String(page))
         ]
-        var req = URLRequest(url: comps.url!)
+        guard let url = comps.url else { throw APIError.invalidResponse }
+        var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
         logger.debug(
@@ -274,7 +286,21 @@ final class DanbooruClient {
         guard let user = config.username, let key = config.apiKey else {
             throw APIError.missingCredentials
         }
-        let authString = "\(user):\(key)".data(using: .utf8)!.base64EncodedString()
+        guard let authData = "\(user):\(key)".data(using: .utf8) else {
+            throw APIError.invalidResponse
+        }
+        let authString = authData.base64EncodedString()
+        request.setValue("Basic \(authString)", forHTTPHeaderField: "Authorization")
+    }
+
+    private func applyOptionalAuth(to request: inout URLRequest) {
+        guard let user = config.username, let key = config.apiKey else {
+            return
+        }
+        guard let authData = "\(user):\(key)".data(using: .utf8) else {
+            return
+        }
+        let authString = authData.base64EncodedString()
         request.setValue("Basic \(authString)", forHTTPHeaderField: "Authorization")
     }
 }

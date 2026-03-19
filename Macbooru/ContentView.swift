@@ -15,6 +15,7 @@ import SwiftUI
 struct PostGridView: View {
     @ObservedObject var search: SearchState
     @Environment(\.appDependencies) private var dependencies
+    @AppStorage("settings.autoRefreshOnLaunch") private var autoRefreshOnLaunch: Bool = true
     // Простая пагинация: единый массив текущей страницы
     @State private var posts: [Post] = []
     @State private var isLoading = false
@@ -27,6 +28,9 @@ struct PostGridView: View {
     @State private var showBackToOrigin: Bool = false
     @State private var knownMaxPage: Int? = nil
     @State private var isFindingLast: Bool = false
+    @State private var replaceRequestID: Int = 0
+    @State private var loadGeneration: Int = 0
+    @State private var didHandleInitialLoad = false
     private let gridSpacing: CGFloat = 24
     private let windowRadius: Int = 2
 
@@ -132,7 +136,12 @@ struct PostGridView: View {
         #endif
 
         .navigationTitle("Posts")
-        .task { await load(page: 1, replace: true) }
+        .task {
+            guard !didHandleInitialLoad else { return }
+            didHandleInitialLoad = true
+            guard autoRefreshOnLaunch else { return }
+            await load(page: 1, replace: true)
+        }
         .onChange(of: search.tileSize) { _, _ in
             recomputeColumns()
         }
@@ -162,7 +171,10 @@ struct PostGridView: View {
                     }
             )
         #endif
-        // .focusedSceneValue(\.gridActions, GridActions(prev: prevAction, next: nextAction, refresh: refreshAction))
+        .focusedSceneValue(
+            \.gridActions,
+            GridActions(prev: prevAction, next: nextAction, refresh: refreshAction)
+        )
         .toolbar { ToolbarItem(placement: .primaryAction) { refreshButton } }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
@@ -288,16 +300,27 @@ struct PostGridView: View {
 
     @MainActor
     private func load(page: Int, replace: Bool = true) async {
+        let generationSnapshot = loadGeneration
+        let requestIDSnapshot: Int
         if replace {
-            guard !isLoading else { return }
+            replaceRequestID &+= 1
+            requestIDSnapshot = replaceRequestID
+            loadGeneration &+= 1
             isLoading = true
         } else {
+            requestIDSnapshot = replaceRequestID
             guard !isLoadingMore, hasMore else { return }
             isLoadingMore = true
             nextPageInFlight = page
         }
         defer {
-            if replace { isLoading = false } else { isLoadingMore = false }
+            if replace {
+                if requestIDSnapshot == replaceRequestID {
+                    isLoading = false
+                }
+            } else {
+                isLoadingMore = false
+            }
             if !replace { nextPageInFlight = nil }
         }
         do {
@@ -307,6 +330,11 @@ struct PostGridView: View {
                 limit: search.pageSize
             )
             if replace {
+                guard requestIDSnapshot == replaceRequestID else { return }
+            } else {
+                guard generationSnapshot == loadGeneration else { return }
+            }
+            if replace {
                 posts = next
             } else {
                 posts.append(contentsOf: next)
@@ -314,7 +342,14 @@ struct PostGridView: View {
             // hasMore true, если получили полный лимит; иначе достигнут конец
             hasMore = next.count == search.pageSize
             self.search.page = max(1, page)
+        } catch is CancellationError {
+            return
         } catch {
+            if replace {
+                guard requestIDSnapshot == replaceRequestID else { return }
+            } else {
+                guard generationSnapshot == loadGeneration else { return }
+            }
             withAnimation {
                 lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"
             }

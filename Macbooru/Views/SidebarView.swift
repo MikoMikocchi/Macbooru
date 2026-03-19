@@ -9,6 +9,7 @@ struct SidebarView: View {
     @ObservedObject var state: SearchState
     var onSearch: (() -> Void)?
     @Environment(\.appDependencies) private var dependencies
+    @AppStorage("settings.showKeyboardHints") private var showKeyboardHints: Bool = true
     private let savedStore = SavedSearchStore()
     private let recentStore = RecentSearchStore()
     @State private var tagQuery: String = ""
@@ -16,6 +17,8 @@ struct SidebarView: View {
     @State private var isLoadingSuggest = false
     // Дебаунс и фокус
     @State private var debounceTask: Task<Void, Never>? = nil
+    @State private var suggestionsTask: Task<Void, Never>? = nil
+    @State private var suggestionsRequestID: Int = 0
     @FocusState private var isSearchFocused: Bool
     // Клавиатура/хайлайт
     @State private var selectedIndex: Int = 0
@@ -152,6 +155,13 @@ struct SidebarView: View {
 
                             Spacer()
                         }
+                        #if os(macOS)
+                            if showKeyboardHints {
+                                Text("Enter: search • ↑/↓: navigate • Tab/Enter: apply suggestion")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        #endif
                     }
                     // Делаем команды доступными через focusedSceneValue
                     .focusedSceneValue(
@@ -209,7 +219,7 @@ struct SidebarView: View {
                             if suggestions.isEmpty {
                                 let token = lastToken(in: state.tags)
                                 if token.count >= 2 {
-                                    Task { await loadSuggestions(prefix: token) }
+                                    startSuggestionsRequest(prefix: token)
                                 }
                                 selectedIndex = 0
                                 return .handled
@@ -544,6 +554,10 @@ struct SidebarView: View {
             refreshSaved()
             refreshRecent()
         }
+        .onDisappear {
+            debounceTask?.cancel()
+            suggestionsTask?.cancel()
+        }
         .focusedSceneValue(
             \.searchActions,
             SearchActions(
@@ -592,6 +606,8 @@ extension SidebarView {
         tagQuery = token
         guard token.count >= 2 else {
             suggestions = []
+            isLoadingSuggest = false
+            suggestionsTask?.cancel()
             return
         }
         // Дебаунс: отменяем предыдущую задачу и ждём 250 мс
@@ -599,7 +615,9 @@ extension SidebarView {
         debounceTask = Task { [token] in
             try? await Task.sleep(nanoseconds: 250_000_000)
             if Task.isCancelled { return }
-            await loadSuggestions(prefix: token)
+            await MainActor.run {
+                startSuggestionsRequest(prefix: token)
+            }
         }
     }
 
@@ -626,16 +644,35 @@ extension SidebarView {
     }
 
     @MainActor
-    fileprivate func loadSuggestions(prefix: String) async {
-        guard !isLoadingSuggest else { return }
+    fileprivate func startSuggestionsRequest(prefix: String) {
+        suggestionsTask?.cancel()
+        suggestionsRequestID &+= 1
+        let requestID = suggestionsRequestID
         isLoadingSuggest = true
-        defer { isLoadingSuggest = false }
-        do {
-            let tags = try await dependencies.autocompleteTags.execute(prefix: prefix, limit: 12)
-            suggestions = tags
-            selectedIndex = 0
-        } catch {
-            suggestions = []
+
+        let autocomplete = dependencies.autocompleteTags
+        suggestionsTask = Task {
+            do {
+                let tags = try await autocomplete.execute(prefix: prefix, limit: 12)
+                await MainActor.run {
+                    guard requestID == suggestionsRequestID else { return }
+                    suggestions = tags
+                    selectedIndex = 0
+                    isLoadingSuggest = false
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    if requestID == suggestionsRequestID {
+                        isLoadingSuggest = false
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    guard requestID == suggestionsRequestID else { return }
+                    suggestions = []
+                    isLoadingSuggest = false
+                }
+            }
         }
     }
 

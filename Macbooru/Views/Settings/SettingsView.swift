@@ -17,7 +17,7 @@ struct SettingsView: View {
     @State private var isUpdatingCacheLimit = false
     @State private var isClearingCache = false
 
-    @AppStorage("settings.autoRefreshOnLaunch") private var autoRefreshOnLaunch: Bool = false
+    @AppStorage("settings.autoRefreshOnLaunch") private var autoRefreshOnLaunch: Bool = true
     @AppStorage("settings.showKeyboardHints") private var showKeyboardHints: Bool = true
     @AppStorage("settings.blurSensitiveDefault") private var blurSensitiveDefault: Bool = true
 
@@ -66,6 +66,9 @@ struct SettingsView: View {
         }
         .onAppear(perform: loadFromStore)
         .onAppear(perform: loadCacheSettings)
+        .onChange(of: blurSensitiveDefault) { _, newValue in
+            search.blurSensitive = newValue
+        }
     }
 
     private func loadFromStore() {

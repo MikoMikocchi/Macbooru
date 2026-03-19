@@ -87,7 +87,7 @@ final class SearchState: ObservableObject {
     @Published var page: Int = 1
     @Published var pageSize: Int = 30
     @Published var searchTrigger: Int = 0
-    @Published var blurSensitive: Bool = true
+    @Published var blurSensitive: Bool
     @Published var lowPerformance: Bool = false
     // Infinite scroll option: when enabled, auto-loads next pages while scrolling
     @Published var infiniteScrollEnabled: Bool = false
@@ -100,6 +100,15 @@ final class SearchState: ObservableObject {
         var label: String { rawValue.capitalized }
     }
     @Published var layout: LayoutMode = .grid
+
+    init(defaults: UserDefaults = .standard) {
+        if let persistedDefault = defaults.object(forKey: "settings.blurSensitiveDefault") as? Bool
+        {
+            blurSensitive = persistedDefault
+        } else {
+            blurSensitive = true
+        }
+    }
 
     // составной запрос для Danbooru: rating:*, затем пользовательские теги
     var danbooruQuery: String? {

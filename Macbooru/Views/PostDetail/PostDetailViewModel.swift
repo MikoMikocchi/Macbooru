@@ -50,7 +50,7 @@ final class PostDetailViewModel: ObservableObject {
 
     // MARK: - Computed
     var bestImageCandidates: [URL] {
-        [post.largeURL, post.fileURL, post.previewURL].compactMap { $0 }
+        [post.fileURL, post.largeURL, post.previewURL].compactMap { $0 }
     }
     
     var pageURL: URL {
@@ -294,4 +294,3 @@ final class PostDetailViewModel: ObservableObject {
         return error.localizedDescription
     }
 }
-
