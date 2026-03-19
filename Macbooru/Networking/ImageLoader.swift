@@ -18,9 +18,9 @@ import os
 
 actor ImageMemoryCache {
     static let shared = ImageMemoryCache()
-    private var cache = NSCache<NSURL, PlatformImage>()
-    func image(for url: URL) -> PlatformImage? { cache.object(forKey: url as NSURL) }
-    func set(_ image: PlatformImage, for url: URL) { cache.setObject(image, forKey: url as NSURL) }
+    private var cache = NSCache<NSString, PlatformImage>()
+    func image(for key: String) -> PlatformImage? { cache.object(forKey: key as NSString) }
+    func set(_ image: PlatformImage, for key: String) { cache.setObject(image, forKey: key as NSString) }
 }
 
 actor ImageDiskCache {
@@ -171,11 +171,19 @@ final class ThrottledImageLoader {
         self.session = URLSession(configuration: cfg)
     }
 
-    func load(_ url: URL) async throws -> PlatformImage {
-        if let cached = await ImageMemoryCache.shared.image(for: url) { return cached }
+    private func cacheKey(for url: URL, maxPixelSize: CGFloat?) -> String {
+        if let maxPixelSize {
+            return "\(url.absoluteString)#\(max(1, Int(maxPixelSize.rounded(.up))))"
+        }
+        return "\(url.absoluteString)#full"
+    }
+
+    func load(_ url: URL, maxPixelSize: CGFloat? = nil) async throws -> PlatformImage {
+        let key = cacheKey(for: url, maxPixelSize: maxPixelSize)
+        if let cached = await ImageMemoryCache.shared.image(for: key) { return cached }
         if let diskData = await ImageDiskCache.shared.data(for: url) {
-            if let diskImage = try? await decodeImage(data: diskData) {
-                await ImageMemoryCache.shared.set(diskImage, for: url)
+            if let diskImage = try? await decodeImage(data: diskData, maxPixelSize: maxPixelSize) {
+                await ImageMemoryCache.shared.set(diskImage, for: key)
                 logger.debug(
                     "Loaded image from disk cache: \(url.lastPathComponent, privacy: .public)")
                 return diskImage
@@ -199,8 +207,8 @@ final class ThrottledImageLoader {
                 else {
                     throw URLError(.badServerResponse)
                 }
-                let image = try await decodeImage(data: data)
-                await ImageMemoryCache.shared.set(image, for: url)
+                let image = try await decodeImage(data: data, maxPixelSize: maxPixelSize)
+                await ImageMemoryCache.shared.set(image, for: key)
                 await ImageDiskCache.shared.store(data, for: url)
                 logger.debug(
                     "Loaded image from network: \(url.lastPathComponent, privacy: .public)")
@@ -217,10 +225,10 @@ final class ThrottledImageLoader {
         throw lastError ?? URLError(.cannotLoadFromNetwork)
     }
 
-    func load(from candidates: [URL]) async throws -> PlatformImage {
+    func load(from candidates: [URL], maxPixelSize: CGFloat? = nil) async throws -> PlatformImage {
         for url in candidates {
             do {
-                let img = try await load(url)
+                let img = try await load(url, maxPixelSize: maxPixelSize)
                 return img
             } catch {
                 // попробуем следующий вариант
@@ -230,37 +238,50 @@ final class ThrottledImageLoader {
         throw URLError(.cannotLoadFromNetwork)
     }
 
-    private func decodeImage(data: Data) async throws -> PlatformImage {
+    private func decodeImage(data: Data, maxPixelSize: CGFloat?) async throws -> PlatformImage {
         #if os(macOS)
-            let wrappedImage: MainActorDecodedImage? = await MainActor.run {
-                if let rep = NSBitmapImageRep(data: data) {
-                    let size = NSSize(width: max(1, rep.pixelsWide), height: max(1, rep.pixelsHigh))
-                    rep.size = size
-                    let image = NSImage(size: size)
-                    image.addRepresentation(rep)
-                    image.isTemplate = false
-                    return MainActorDecodedImage(value: image)
+            struct DecodedCGImage: @unchecked Sendable { let value: CGImage }
+
+            let decodedCG: DecodedCGImage? = {
+                guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+                if let maxPixelSize {
+                    let opts: [CFString: Any] = [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceCreateThumbnailWithTransform: true,
+                        kCGImageSourceShouldCacheImmediately: true,
+                        kCGImageSourceThumbnailMaxPixelSize: max(1, Int(maxPixelSize.rounded(.up))),
+                    ]
+                    guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+                    else { return nil }
+                    return DecodedCGImage(value: cg)
                 }
-                if let src = CGImageSourceCreateWithData(data as CFData, nil),
-                    let cg = CGImageSourceCreateImageAtIndex(
-                        src, 0, [kCGImageSourceShouldCache: true] as CFDictionary)
-                {
-                    let size = NSSize(width: cg.width, height: cg.height)
-                    let image = NSImage(cgImage: cg, size: size)
-                    image.isTemplate = false
-                    return MainActorDecodedImage(value: image)
+                let opts: [CFString: Any] = [kCGImageSourceShouldCacheImmediately: true]
+                guard let cg = CGImageSourceCreateImageAtIndex(src, 0, opts as CFDictionary) else {
+                    return nil
                 }
-                if let image = NSImage(data: data) {
-                    if image.size == .zero,
-                        let rep = image.representations.first as? NSBitmapImageRep
-                    {
-                        image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                return DecodedCGImage(value: cg)
+            }()
+
+            let wrappedImage: MainActorDecodedImage? =
+                if let decodedCG {
+                    await MainActor.run {
+                        let size = NSSize(width: decodedCG.value.width, height: decodedCG.value.height)
+                        let image = NSImage(cgImage: decodedCG.value, size: size)
+                        image.isTemplate = false
+                        return MainActorDecodedImage(value: image)
                     }
-                    image.isTemplate = false
-                    return MainActorDecodedImage(value: image)
+                } else {
+                    await MainActor.run {
+                        guard let image = NSImage(data: data) else { return nil }
+                        if image.size == .zero,
+                            let rep = image.representations.first as? NSBitmapImageRep
+                        {
+                            image.size = NSSize(width: rep.pixelsWide, height: rep.pixelsHigh)
+                        }
+                        image.isTemplate = false
+                        return MainActorDecodedImage(value: image)
+                    }
                 }
-                return nil
-            }
             guard let image = wrappedImage?.value else { throw URLError(.cannotDecodeContentData) }
             logger.debug(
                 "Decoded image (macOS) \(Int(image.size.width))x\(Int(image.size.height))"
@@ -284,6 +305,7 @@ struct RemoteImage: View {
     let contentMode: ContentMode
     var animateFirstAppearance: Bool = true
     var animateUpgrades: Bool = false
+    var maxPixelSize: CGFloat? = nil
     var interpolation: Image.Interpolation = .high
     var decoratedBackground: Bool = true
     var cornerRadius: CGFloat = 8
@@ -293,7 +315,6 @@ struct RemoteImage: View {
     @State private var pixelCount: Int = 0
     @State private var isLoading = false
     @State private var lastError: Error? = nil
-    @State private var didShowFirst = false
 
     var body: some View {
         ZStack {
@@ -337,7 +358,10 @@ struct RemoteImage: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
         .contentShape(Rectangle())
-        .task(id: candidates) { await load() }
+        .task(
+            id:
+                "\(candidates.map(\.absoluteString).joined(separator: "|"))#\(maxPixelSize.map { max(1, Int($0.rounded(.up))) } ?? 0)"
+        ) { await load() }
     }
 
     private func load() async {
@@ -353,15 +377,20 @@ struct RemoteImage: View {
         }
         // Прогрессивная загрузка: сначала быстрый превью, затем апгрейд до более крупного
         var firstShownIndex: Int? = nil
+        var bestShownPixelCount = 0
         for (idx, url) in candidates.enumerated() {
             if Task.isCancelled { return }
             do {
-                let img = try await ThrottledImageLoader.shared.load(url)
+                let img = try await ThrottledImageLoader.shared.load(
+                    url,
+                    maxPixelSize: maxPixelSize
+                )
                 if Task.isCancelled { return }
                 let newPixels = pixelCountFor(img)
                 // показать первый успешный вариант
                 if firstShownIndex == nil {
                     firstShownIndex = idx
+                    bestShownPixelCount = newPixels
                     await MainActor.run {
                         if Task.isCancelled { return }
                         if animateFirstAppearance && !lowPerf {
@@ -374,9 +403,10 @@ struct RemoteImage: View {
                             self.pixelCount = newPixels
                         }
                         self.isLoading = false
-                        self.didShowFirst = true
                     }
-                } else if newPixels > pixelCount {  // улучшение — заменить
+                    if !animateUpgrades { break }
+                } else if animateUpgrades, newPixels > bestShownPixelCount {  // улучшение — заменить
+                    bestShownPixelCount = newPixels
                     await MainActor.run {
                         if Task.isCancelled { return }
                         if animateUpgrades && !lowPerf {

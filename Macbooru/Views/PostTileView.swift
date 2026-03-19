@@ -21,6 +21,7 @@ struct PostTileView: View {
                 contentMode: .fit,
                 animateFirstAppearance: !search.lowPerformance,
                 animateUpgrades: false,
+                maxPixelSize: height * 2.2,
                 interpolation: search.lowPerformance ? .low : .medium,
                 decoratedBackground: false,
                 cornerRadius: 0

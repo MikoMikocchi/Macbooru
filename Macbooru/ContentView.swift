@@ -483,10 +483,11 @@ private struct PostsGridScroll: View {
     var onReachedEnd: (() -> Void)? = nil
 
     var body: some View {
+        let nearEndStartIndex = max(0, posts.count - 5)
         ScrollView {
             LazyVGrid(columns: columns, spacing: gridSpacing) {
-                // Use enumerated to detect near-end items reliably
-                ForEach(Array(posts.enumerated()), id: \.1.id) { index, post in
+                ForEach(posts.indices, id: \.self) { index in
+                    let post = posts[index]
                     NavigationLink(value: post) {
                         PostTileView(post: post, height: tileHeight)
                             .frame(maxWidth: .infinity)
@@ -498,8 +499,7 @@ private struct PostsGridScroll: View {
                     .modifier(AnimatedItemModifier(index: index))
                     .onAppear {
                         guard infiniteEnabled else { return }
-                        let threshold = max(0, posts.count - 5)
-                        if index >= threshold { onReachedEnd?() }
+                        if index >= nearEndStartIndex { onReachedEnd?() }
                     }
                 }
                 if isLoading { ProgressView().padding() }
@@ -693,8 +693,12 @@ private struct AnimatedItemModifier: ViewModifier {
             .offset(y: hasAppeared ? 0 : 20)
             .onAppear {
                 guard !hasAppeared else { return }
-                let anim: Animation =
-                    lowPerf ? .linear(duration: 0) : Theme.Animations.stagger(index: index)
+                let anim: Animation = {
+                    if lowPerf || index > 10 {
+                        return .linear(duration: 0)
+                    }
+                    return Theme.Animations.stagger(index: index, baseDelay: 0.015, style: .quick)
+                }()
                 withAnimation(anim) {
                     hasAppeared = true
                 }
