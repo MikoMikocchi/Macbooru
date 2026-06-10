@@ -169,10 +169,7 @@ struct PostGridView: View {
                     }
             )
         #endif
-        .focusedSceneValue(
-            \.gridActions,
-            GridActions(prev: prevAction, next: nextAction, refresh: refreshAction)
-        )
+        .focusedSceneValue(\.gridActions, gridActions)
         .toolbar { ToolbarItem(placement: .primaryAction) { refreshButton } }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
@@ -342,6 +339,8 @@ struct PostGridView: View {
             self.search.page = max(1, page)
         } catch is CancellationError {
             return
+        } catch let error as URLError where error.code == .cancelled {
+            return
         } catch {
             if replace {
                 guard requestIDSnapshot == replaceRequestID else { return }
@@ -394,6 +393,10 @@ struct PostGridView: View {
 
     private func refreshAction() {
         Task { await refresh() }
+    }
+
+    private var gridActions: GridActions {
+        GridActions(prev: prevAction, next: nextAction, refresh: refreshAction)
     }
 
     // MARK: - Pagination window
@@ -623,6 +626,7 @@ private struct BackToOriginChip: View {
     let page: Int
     let action: () -> Void
     @State private var hovering = false
+    @Environment(\.lowPerformance) private var lowPerf
 
     var body: some View {
         Button(action: action) {
@@ -644,17 +648,21 @@ private struct BackToOriginChip: View {
             )
         }
         .buttonStyle(.plain)
-        .scaleEffect(hovering ? 1.03 : 1.0)
+        .scaleEffect(lowPerf ? 1.0 : (hovering ? 1.03 : 1.0))
         .shadow(
             color: Theme.ColorPalette.accent.opacity(hovering ? 0.25 : 0.18),
             radius: hovering ? 10 : 6,
             x: 0,
             y: hovering ? 4 : 2
         )
-        .animation(Theme.Animations.interactive(), value: hovering)
+        .animation(lowPerf ? nil : Theme.Animations.interactive(lowPerformance: lowPerf), value: hovering)
         .onHover { value in
-            withAnimation(Theme.Animations.hover()) {
+            if lowPerf {
                 hovering = value
+            } else {
+                withAnimation(Theme.Animations.hover(lowPerformance: lowPerf)) {
+                    hovering = value
+                }
             }
         }
     }
@@ -697,7 +705,9 @@ private struct AnimatedItemModifier: ViewModifier {
                     if lowPerf || index > 10 {
                         return .linear(duration: 0)
                     }
-                    return Theme.Animations.stagger(index: index, baseDelay: 0.015, style: .quick)
+                    return Theme.Animations.stagger(
+                        index: index, baseDelay: 0.015, style: .quick, lowPerformance: lowPerf
+                    )
                 }()
                 withAnimation(anim) {
                     hasAppeared = true

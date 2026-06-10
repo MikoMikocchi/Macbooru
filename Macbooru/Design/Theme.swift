@@ -166,10 +166,10 @@ enum Theme {
             #endif
         }
 
-        @Environment(\.lowPerformance) private static var lowPerf
-
-        static func interactive(_ style: SpringStyle = .standard) -> Animation {
-            if lowPerf { return .linear(duration: 0) }
+        static func interactive(
+            _ style: SpringStyle = .standard, lowPerformance: Bool = false
+        ) -> Animation {
+            if lowPerformance { return .linear(duration: 0) }
             let profile = profile(for: style)
             return Animation.spring(
                 response: profile.response,
@@ -178,16 +178,18 @@ enum Theme {
             )
         }
 
-        static func hover(duration: Double? = nil) -> Animation {
-            if lowPerf { return .linear(duration: 0) }
+        static func hover(duration: Double? = nil, lowPerformance: Bool = false) -> Animation {
+            if lowPerformance { return .linear(duration: 0) }
             return Animation.easeInOut(duration: duration ?? hoverDuration)
         }
 
-        static func stagger(index: Int, baseDelay: Double? = nil, style: SpringStyle = .standard)
-            -> Animation
-        {
-            if lowPerf { return .linear(duration: 0) }
-            return interactive(style).delay(Double(index) * (baseDelay ?? defaultStagger))
+        static func stagger(
+            index: Int, baseDelay: Double? = nil, style: SpringStyle = .standard,
+            lowPerformance: Bool = false
+        ) -> Animation {
+            if lowPerformance { return .linear(duration: 0) }
+            return interactive(style, lowPerformance: lowPerformance).delay(
+                Double(index) * (baseDelay ?? defaultStagger))
         }
     }
 
@@ -260,12 +262,12 @@ enum Theme {
                     y: lowPerf ? 2 : (isHover && hoverElevates ? 10 : 6)
                 )
                 .scaleEffect(lowPerf ? 1.0 : (isHover && hoverElevates ? 1.015 : 1.0))
-                .animation(lowPerf ? nil : Animations.interactive(), value: isHover)
+                .animation(lowPerf ? nil : Animations.interactive(lowPerformance: lowPerf), value: isHover)
                 .onHover { hovering in
                     if lowPerf {
                         isHover = hovering
                     } else {
-                        withAnimation(Animations.hover()) { isHover = hovering }
+                        withAnimation(Animations.hover(lowPerformance: lowPerf)) { isHover = hovering }
                     }
                 }
         }
@@ -319,13 +321,13 @@ enum Theme {
                     x: 0,
                     y: lowPerf ? 2 : (hovering ? 10 : 4)
                 )
-                .animation(lowPerf ? nil : Animations.interactive(), value: hovering)
+                .animation(lowPerf ? nil : Animations.interactive(lowPerformance: lowPerf), value: hovering)
                 .onHover { value in
                     if lowPerf {
                         hovering = value
                         hoverBinding?.wrappedValue = value
                     } else {
-                        withAnimation(Animations.hover()) {
+                        withAnimation(Animations.hover(lowPerformance: lowPerf)) {
                             hovering = value
                             hoverBinding?.wrappedValue = value
                         }
@@ -473,12 +475,12 @@ enum Theme {
             .buttonStyle(.plain)
             .disabled(isDisabled || showsProgress)
             .opacity(isDisabled && !showsProgress ? 0.55 : 1.0)
-            .animation(lowPerf ? nil : Animations.interactive(), value: hovering)
+            .animation(lowPerf ? nil : Animations.interactive(lowPerformance: lowPerf), value: hovering)
             .onHover { value in
                 if lowPerf {
                     hovering = value
                 } else {
-                    withAnimation(Animations.hover()) { hovering = value }
+                    withAnimation(Animations.hover(lowPerformance: lowPerf)) { hovering = value }
                 }
             }
         }
@@ -548,12 +550,12 @@ enum Theme {
             .buttonStyle(.plain)
             .disabled(isDisabled)
             .opacity(isDisabled ? 0.45 : 1.0)
-            .animation(lowPerf ? nil : Animations.interactive(), value: hovering)
+            .animation(lowPerf ? nil : Animations.interactive(lowPerformance: lowPerf), value: hovering)
             .onHover { value in
                 if lowPerf {
                     hovering = value
                 } else {
-                    withAnimation(Animations.hover()) {
+                    withAnimation(Animations.hover(lowPerformance: lowPerf)) {
                         hovering = value
                     }
                 }
@@ -687,7 +689,7 @@ enum Theme {
                     y: lowPerf ? 1 : 3
                 )
                 .scaleEffect(lowPerf ? 1.0 : (isPressed ? 0.97 : 1.0))
-                .animation(lowPerf ? nil : Animations.interactive(), value: isPressed)
+                .animation(lowPerf ? nil : Animations.interactive(lowPerformance: lowPerf), value: isPressed)
         }
     }
 }

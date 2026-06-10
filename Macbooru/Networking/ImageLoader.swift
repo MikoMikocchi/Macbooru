@@ -152,6 +152,12 @@ actor ImageDiskCache {
 final class ThrottledImageLoader {
     static let shared = ThrottledImageLoader()
 
+    private static let userAgent: String = {
+        let version =
+            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        return "Macbooru/\(version) (macOS)"
+    }()
+
     private let session: URLSession
     private let logger = Logger.imageLoader
 
@@ -164,8 +170,7 @@ final class ThrottledImageLoader {
         cfg.requestCachePolicy = .returnCacheDataElseLoad
         cfg.urlCache = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 256 * 1024 * 1024)
         cfg.httpAdditionalHeaders = [
-            "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+            "User-Agent": Self.userAgent,
             "Accept": "image/jpeg,image/png,*/*;q=0.5",
         ]
         self.session = URLSession(configuration: cfg)
@@ -196,9 +201,7 @@ final class ThrottledImageLoader {
         var req = URLRequest(url: url)
         req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
         req.setValue("image/jpeg,image/png,*/*;q=0.5", forHTTPHeaderField: "Accept")
-        req.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            forHTTPHeaderField: "User-Agent")
+        req.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         var lastError: Error? = nil
         for attempt in 0..<3 {
             do {

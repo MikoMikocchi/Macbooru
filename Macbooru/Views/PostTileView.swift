@@ -32,7 +32,7 @@ struct PostTileView: View {
                 if search.lowPerformance {
                     imageLoaded = true
                 } else {
-                    withAnimation(Theme.Animations.hover().delay(0.05)) {
+                    withAnimation(Theme.Animations.hover(lowPerformance: search.lowPerformance).delay(0.05)) {
                         imageLoaded = true
                     }
                 }
@@ -40,16 +40,24 @@ struct PostTileView: View {
 
             Theme.Gradients.modernOverlay(opacity: hover ? 0.7 : 0.52)
                 .allowsHitTesting(false)
-                .animation(search.lowPerformance ? nil : Theme.Animations.hover(), value: hover)
+                .animation(
+                    search.lowPerformance ? nil : Theme.Animations.hover(lowPerformance: search.lowPerformance),
+                    value: hover
+                )
 
             infoRow
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .opacity(imageLoaded ? (hover ? 1.0 : 0.94) : 0)
                 .offset(y: imageLoaded ? 0 : 14)
-                .animation(search.lowPerformance ? nil : Theme.Animations.hover(), value: hover)
                 .animation(
-                    search.lowPerformance ? nil : Theme.Animations.interactive().delay(0.12),
+                    search.lowPerformance ? nil : Theme.Animations.hover(lowPerformance: search.lowPerformance),
+                    value: hover
+                )
+                .animation(
+                    search.lowPerformance
+                        ? nil
+                        : Theme.Animations.interactive(lowPerformance: search.lowPerformance).delay(0.12),
                     value: imageLoaded
                 )
         }
@@ -141,7 +149,11 @@ struct PostTileView: View {
                 in: Circle()
             )
             .scaleEffect(search.lowPerformance ? 1.0 : (hover ? 1.08 : 1.0))
-            .animation(search.lowPerformance ? nil : Theme.Animations.interactive(), value: hover)
+            .animation(
+                search.lowPerformance
+                    ? nil : Theme.Animations.interactive(lowPerformance: search.lowPerformance),
+                value: hover
+            )
     }
 }
 

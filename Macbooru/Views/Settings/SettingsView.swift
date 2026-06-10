@@ -483,6 +483,7 @@ private struct RowBase<Accessory: View>: View {
     var tint: Color
     let accessory: () -> Accessory
     @State private var hovering = false
+    @Environment(\.lowPerformance) private var lowPerf
 
     var body: some View {
         HStack(spacing: 12) {
@@ -515,15 +516,19 @@ private struct RowBase<Accessory: View>: View {
                 .strokeBorder(
                     Theme.ColorPalette.glassBorder.opacity(hovering ? 0.7 : 0.45), lineWidth: 1)
         )
-        .scaleEffect(hovering ? 1.02 : 1.0)
+        .scaleEffect(lowPerf ? 1.0 : (hovering ? 1.02 : 1.0))
         .shadow(
             color: Theme.ColorPalette.shadowSoft.opacity(0.45), radius: hovering ? 9 : 6, x: 0,
             y: hovering ? 4 : 2
         )
-        .animation(Theme.Animations.interactive(), value: hovering)
+        .animation(lowPerf ? nil : Theme.Animations.interactive(lowPerformance: lowPerf), value: hovering)
         .onHover { value in
-            withAnimation(Theme.Animations.hover()) {
+            if lowPerf {
                 hovering = value
+            } else {
+                withAnimation(Theme.Animations.hover(lowPerformance: lowPerf)) {
+                    hovering = value
+                }
             }
         }
         .accessibilityElement(children: .combine)

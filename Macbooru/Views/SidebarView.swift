@@ -167,32 +167,6 @@ struct SidebarView: View {
                             }
                         #endif
                     }
-                    
-                    .focusedSceneValue(
-                        \.searchActions,
-                        SearchActions(
-                            focusSearch: {
-                                #if os(macOS)
-                                    isSearchFocused = true
-                                #endif
-                            },
-                            setPageSize15: {
-                                guard state.pageSize != 15 else { return }
-                                state.pageSize = 15
-                                state.resetForNewSearch()
-                            },
-                            setPageSize30: {
-                                guard state.pageSize != 30 else { return }
-                                state.pageSize = 30
-                                state.resetForNewSearch()
-                            },
-                            setPageSize60: {
-                                guard state.pageSize != 60 else { return }
-                                state.pageSize = 60
-                                state.resetForNewSearch()
-                            }
-                        )
-                    )
 
                     .onChangeCompat(of: state.tags) { newValue in
                         scheduleAutocomplete(for: newValue)
@@ -536,30 +510,32 @@ struct SidebarView: View {
             debounceTask?.cancel()
             suggestionsTask?.cancel()
         }
-        .focusedSceneValue(
-            \.searchActions,
-            SearchActions(
-                focusSearch: {
-                    #if os(macOS)
-                        isSearchFocused = true
-                    #endif
-                },
-                setPageSize15: {
-                    guard state.pageSize != 15 else { return }
-                    state.pageSize = 15
-                    state.resetForNewSearch()
-                },
-                setPageSize30: {
-                    guard state.pageSize != 30 else { return }
-                    state.pageSize = 30
-                    state.resetForNewSearch()
-                },
-                setPageSize60: {
-                    guard state.pageSize != 60 else { return }
-                    state.pageSize = 60
-                    state.resetForNewSearch()
-                }
-            ))
+        .focusedSceneValue(\.searchActions, searchActions)
+    }
+
+    private var searchActions: SearchActions {
+        SearchActions(
+            focusSearch: {
+                #if os(macOS)
+                    isSearchFocused = true
+                #endif
+            },
+            setPageSize15: {
+                guard state.pageSize != 15 else { return }
+                state.pageSize = 15
+                state.resetForNewSearch()
+            },
+            setPageSize30: {
+                guard state.pageSize != 30 else { return }
+                state.pageSize = 30
+                state.resetForNewSearch()
+            },
+            setPageSize60: {
+                guard state.pageSize != 60 else { return }
+                state.pageSize = 60
+                state.resetForNewSearch()
+            }
+        )
     }
 }
 
@@ -635,6 +611,12 @@ extension SidebarView {
                     isLoadingSuggest = false
                 }
             } catch is CancellationError {
+                await MainActor.run {
+                    if requestID == suggestionsRequestID {
+                        isLoadingSuggest = false
+                    }
+                }
+            } catch let error as URLError where error.code == .cancelled {
                 await MainActor.run {
                     if requestID == suggestionsRequestID {
                         isLoadingSuggest = false

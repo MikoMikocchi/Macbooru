@@ -14,6 +14,7 @@ struct ActionChip: View {
     var accessibilityHint: String? = nil
 
     @State private var hovering = false
+    @Environment(\.lowPerformance) private var lowPerf
 
     var body: some View {
         HStack(spacing: 8) {
@@ -43,11 +44,17 @@ struct ActionChip: View {
                 .strokeBorder(tint.opacity(borderOpacity), lineWidth: 1)
         )
         .scaleEffect(hovering && state == .normal ? 1.02 : 1.0)
-        .animation(Theme.Animations.interactive(), value: hovering)
+        .animation(
+            lowPerf ? nil : Theme.Animations.interactive(lowPerformance: lowPerf), value: hovering
+        )
         .onHover { value in
             guard state == .normal else { return }
-            withAnimation(Theme.Animations.hover()) {
+            if lowPerf {
                 hovering = value
+            } else {
+                withAnimation(Theme.Animations.hover(lowPerformance: lowPerf)) {
+                    hovering = value
+                }
             }
         }
         .accessibilityElement()
