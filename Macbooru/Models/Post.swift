@@ -22,6 +22,8 @@ struct Post: Identifiable, Codable, Hashable {
     let isFavorited: Bool?
     let upScore: Int?
     let downScore: Int?
+    let fileExt: String?
+    let hasLarge: Bool?
 
     
     var fileURL: URL? { URL.makeDanbooruURL(fileUrl) }
@@ -35,6 +37,11 @@ struct Post: Identifiable, Codable, Hashable {
     var tagsGeneral: [String] { Post.split(tagStringGeneral) }
     var tagsMeta: [String] { Post.split(tagStringMeta) }
     var allTags: [String] { Post.split(tagString) }
+
+    var isUgoira: Bool {
+        let ext = fileExt?.lowercased()
+        return ext == "zip" || ext == "ugoira"
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -56,6 +63,8 @@ struct Post: Identifiable, Codable, Hashable {
         case isFavorited = "is_favorited"
         case upScore = "up_score"
         case downScore = "down_score"
+        case fileExt = "file_ext"
+        case hasLarge = "has_large"
     }
 
     private static func split(_ s: String?) -> [String] {

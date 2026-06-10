@@ -19,7 +19,9 @@ final class PostDecodingTests: XCTestCase {
           "source": "https://artist.example/post/1",
           "is_favorited": true,
           "up_score": 123,
-          "down_score": 5
+          "down_score": 5,
+          "file_ext": "jpg",
+          "has_large": true
         }]
         """.data(using: .utf8)!
 
@@ -33,5 +35,22 @@ final class PostDecodingTests: XCTestCase {
         XCTAssertEqual(posts.first?.isFavorited, true)
         XCTAssertEqual(posts.first?.upScore, 123)
         XCTAssertEqual(posts.first?.downScore, 5)
+        XCTAssertEqual(posts.first?.fileExt, "jpg")
+        XCTAssertEqual(posts.first?.hasLarge, true)
+        XCTAssertFalse(posts.first?.isUgoira ?? true)
+    }
+
+    func testDecodeUgoiraPost() throws {
+        let json = """
+        [{
+          "id": 456,
+          "file_ext": "zip",
+          "tag_string": "animated ugoira"
+        }]
+        """.data(using: .utf8)!
+
+        let posts = try JSONDecoder().decode([Post].self, from: json)
+        XCTAssertEqual(posts.first?.id, 456)
+        XCTAssertTrue(posts.first?.isUgoira ?? false)
     }
 }

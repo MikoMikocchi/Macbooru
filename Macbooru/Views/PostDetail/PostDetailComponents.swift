@@ -85,7 +85,7 @@ struct ActionChip: View {
     }
 
     private var accessibilityValueText: String {
-        state == .loading ? "Loading" : ""
+        state == .loading ? "Загрузка" : ""
     }
 
     private var resolvedHint: String? {
@@ -94,9 +94,9 @@ struct ActionChip: View {
         }
         switch state {
         case .disabled:
-            return "Currently unavailable"
+            return "Сейчас недоступно"
         case .loading:
-            return "In progress"
+            return "Выполняется"
         default:
             return nil
         }
@@ -129,7 +129,7 @@ struct ActionsCard<Open: View, Copy: View, Interact: View, More: View>: View {
                         Image(systemName: "tray.and.arrow.down")
                             .font(.system(size: 14, weight: .semibold))
                     }
-                    Text(isDownloading ? "Saving…" : "Download")
+                    Text(isDownloading ? "Сохранение…" : "Скачать")
                         .font(.callout.weight(.semibold))
                 }
             }
@@ -167,38 +167,38 @@ struct InfoCard: View {
                 InfoRow(icon: "number", title: "ID", value: "#\(post.id)")
 
                 if let score = post.score {
-                    InfoRow(icon: "star.fill", title: "Score", value: "\(score)", tint: .yellow) {
+                    InfoRow(icon: "star.fill", title: "Рейтинг", value: "\(score)", tint: .yellow) {
                         ScoreChip(score: score)
                     }
                 }
 
                 if let fav = favoriteCount {
-                    InfoRow(icon: "heart.fill", title: "Favorites", value: "\(fav)", tint: .pink)
+                    InfoRow(icon: "heart.fill", title: "В избранном", value: "\(fav)", tint: .pink)
                 }
 
                 if let isFav = isFavorited {
                     InfoRow(
                         icon: "heart.circle.fill",
-                        title: "In favorites",
-                        value: isFav ? "Yes" : "No",
+                        title: "Избранное",
+                        value: isFav ? "Да" : "Нет",
                         tint: .pink
                     )
                 }
 
                 if let up = upScore {
                     InfoRow(
-                        icon: "hand.thumbsup.fill", title: "Upvotes", value: "\(up)", tint: .green)
+                        icon: "hand.thumbsup.fill", title: "Плюсы", value: "\(up)", tint: .green)
                 }
 
                 if let down = downScore {
                     InfoRow(
-                        icon: "hand.thumbsdown.fill", title: "Downvotes", value: "\(down)",
+                        icon: "hand.thumbsdown.fill", title: "Минусы", value: "\(down)",
                         tint: .orange)
                 }
 
                 if let width = post.width, let height = post.height {
                     InfoRow(
-                        icon: "aspectratio", title: "Size", value: "\(width) × \(height)",
+                        icon: "aspectratio", title: "Размер", value: "\(width) × \(height)",
                         tint: .cyan
                     ) {
                         SizeBadge(width: width, height: height)
@@ -208,7 +208,7 @@ struct InfoCard: View {
                 if let date = post.createdAt {
                     InfoRow(
                         icon: "calendar",
-                        title: "Created",
+                        title: "Создан",
                         value: date.formatted(date: .abbreviated, time: .shortened),
                         tint: .blue
                     )
@@ -220,7 +220,7 @@ struct InfoCard: View {
                 Link(destination: url) {
                     HStack(spacing: 8) {
                         Image(systemName: "link")
-                        Text("Open source")
+                        Text("Открыть источник")
                             .font(.callout.weight(.semibold))
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.right")
@@ -327,7 +327,7 @@ struct TagsCard: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if !post.tagsArtist.isEmpty {
                         TagSection(
-                            title: "Artist",
+                            title: "Художник",
                             color: .purple,
                             tags: post.tagsArtist,
                             onOpenTag: onOpenTag,
@@ -336,7 +336,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsCopyright.isEmpty {
                         TagSection(
-                            title: "Copyright",
+                            title: "Правообладатель",
                             color: .teal,
                             tags: post.tagsCopyright,
                             onOpenTag: onOpenTag,
@@ -345,7 +345,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsCharacter.isEmpty {
                         TagSection(
-                            title: "Characters",
+                            title: "Персонажи",
                             color: .orange,
                             tags: post.tagsCharacter,
                             onOpenTag: onOpenTag,
@@ -354,7 +354,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsGeneral.isEmpty {
                         TagSection(
-                            title: "General",
+                            title: "Общие",
                             color: .secondary,
                             tags: post.tagsGeneral,
                             onOpenTag: onOpenTag,
@@ -363,7 +363,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsMeta.isEmpty {
                         TagSection(
-                            title: "Meta",
+                            title: "Мета",
                             color: .pink,
                             tags: post.tagsMeta,
                             onOpenTag: onOpenTag,
@@ -379,7 +379,7 @@ struct TagsCard: View {
                     onCopyTag: { onCopyTag($0) }
                 )
             } else {
-                Text("No tags")
+                Text("Нет тегов")
                     .font(.callout)
                     .foregroundStyle(Theme.ColorPalette.textMuted)
             }
@@ -429,7 +429,7 @@ struct TagSection: View {
                         pb.clearContents()
                         pb.setString(tags.joined(separator: " "), forType: .string)
                     }
-                    .help("Copy section tags")
+                    .help("Скопировать теги раздела")
                 #endif
             }
             TagFlowView(
@@ -497,7 +497,7 @@ struct TagChip: View {
                 chipContent
             }
             .buttonStyle(.plain)
-            .help("Left click to search, right click to copy")
+            .help("ЛКМ — поиск, ПКМ — копировать")
             .overlay(
                 RightClickCatcher(onRightClick: { onCopy?() })
                     .allowsHitTesting(true)
@@ -536,8 +536,8 @@ struct TagChip: View {
             )
             .foregroundStyle(tint)
             .accessibilityElement()
-            .accessibilityLabel(Text("Tag \(title)"))
-            .accessibilityHint(Text("Double tap to search."))
+            .accessibilityLabel(Text("Тег \(title)"))
+            .accessibilityHint(Text("Двойной тап для поиска."))
     }
 }
 
@@ -571,7 +571,7 @@ struct CommentsCard: View {
             if isLoading {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Loading comments…")
+                    Text("Загрузка комментариев…")
                         .font(.callout)
                         .foregroundStyle(Theme.ColorPalette.textMuted)
                 }
@@ -581,12 +581,12 @@ struct CommentsCard: View {
                         .font(.callout)
                         .foregroundStyle(Theme.ColorPalette.textMuted)
                     Button(action: onReload) {
-                        Label("Retry", systemImage: "arrow.clockwise")
+                        Label("Повторить", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
                 }
             } else if comments.isEmpty {
-                Text("No comments yet")
+                Text("Комментариев пока нет")
                     .font(.callout)
                     .foregroundStyle(Theme.ColorPalette.textMuted)
             } else {
@@ -620,7 +620,7 @@ struct CommentsCard: View {
             Divider().opacity(0.08)
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Add Comment")
+                Text("Добавить комментарий")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ColorPalette.textPrimary)
 
@@ -637,7 +637,7 @@ struct CommentsCard: View {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
                     )
-                    .accessibilityHint("Enter your comment")
+                    .accessibilityHint("Введите комментарий")
 
                 HStack {
                     Spacer()
@@ -647,7 +647,7 @@ struct CommentsCard: View {
                                 .controlSize(.small)
                                 .tint(.white)
                         } else {
-                            Label("Post", systemImage: "paperplane")
+                            Label("Отправить", systemImage: "paperplane")
                                 .font(.callout.weight(.semibold))
                         }
                     }
@@ -730,12 +730,12 @@ struct CommentRow: View {
                 .strokeBorder(Theme.ColorPalette.glassBorder.opacity(0.6), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("Comment by \(authorName)"))
+        .accessibilityLabel(Text("Комментарий от \(authorName)"))
     }
 
     private var authorName: String {
         if let name = comment.creatorName, !name.isEmpty { return name }
-        return "Anonymous"
+        return "Аноним"
     }
 
     private var avatarInitial: String {
@@ -810,3 +810,26 @@ struct CommentRow: View {
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     }
 #endif
+
+struct UgoiraPlaceholderView: View {
+    let pageURL: URL
+    let height: CGFloat
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "film.stack")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("Ugoira")
+                .font(.title2.weight(.semibold))
+            Text("Анимированный WebP — откройте в браузере")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Link("Открыть страницу поста", destination: pageURL)
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .background(Theme.ColorPalette.controlBackground.opacity(0.5))
+    }
+}

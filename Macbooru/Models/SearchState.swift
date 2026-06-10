@@ -80,6 +80,14 @@ enum TileSize: String, CaseIterable, Identifiable, Hashable {
 }
 
 final class SearchState: ObservableObject {
+    private let defaults: UserDefaults
+
+    private enum Keys {
+        static let blurSensitive = "settings.blurSensitiveDefault"
+        static let lowPerformance = "settings.lowPerformance"
+        static let infiniteScroll = "settings.infiniteScrollEnabled"
+    }
+
     @Published var tags: String = ""
     @Published var rating: Rating = .any
     @Published var tileSize: TileSize = .medium
@@ -88,18 +96,28 @@ final class SearchState: ObservableObject {
     @Published var pageSize: Int = 30
     @Published var searchTrigger: Int = 0
     @Published var blurSensitive: Bool
-    @Published var lowPerformance: Bool = false
+    @Published var lowPerformance: Bool = false {
+        didSet { defaults.set(lowPerformance, forKey: Keys.lowPerformance) }
+    }
     // Infinite scroll option: when enabled, auto-loads next pages while scrolling
-    @Published var infiniteScrollEnabled: Bool = false
+    @Published var infiniteScrollEnabled: Bool = false {
+        didSet { defaults.set(infiniteScrollEnabled, forKey: Keys.infiniteScroll) }
+    }
     // Pool search (optional). If set to a valid number, adds `pool:ID` to query
     @Published var poolID: String = ""
 
     init(defaults: UserDefaults = .standard) {
-        if let persistedDefault = defaults.object(forKey: "settings.blurSensitiveDefault") as? Bool
-        {
+        self.defaults = defaults
+        if let persistedDefault = defaults.object(forKey: Keys.blurSensitive) as? Bool {
             blurSensitive = persistedDefault
         } else {
             blurSensitive = true
+        }
+        if defaults.object(forKey: Keys.lowPerformance) != nil {
+            lowPerformance = defaults.bool(forKey: Keys.lowPerformance)
+        }
+        if defaults.object(forKey: Keys.infiniteScroll) != nil {
+            infiniteScrollEnabled = defaults.bool(forKey: Keys.infiniteScroll)
         }
     }
 

@@ -8,6 +8,7 @@ import SwiftUI
 struct SidebarView: View {
     @ObservedObject var state: SearchState
     @Environment(\.appDependencies) private var dependencies
+    @EnvironmentObject private var dependenciesStore: AppDependenciesStore
     @AppStorage("settings.showKeyboardHints") private var showKeyboardHints: Bool = true
     private let savedStore = SavedSearchStore()
     private let recentStore = RecentSearchStore()
@@ -46,11 +47,11 @@ struct SidebarView: View {
                     HStack(spacing: 12) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(.blue.opacity(0.15))
+                                .fill(Theme.ColorPalette.accent.opacity(0.15))
                                 .frame(width: 32, height: 32)
                             Image(systemName: "magnifyingglass")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.blue)
+                                .foregroundStyle(Theme.ColorPalette.accent)
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
@@ -74,10 +75,10 @@ struct SidebarView: View {
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(.white.opacity(0.05))
+                                    .fill(Theme.ColorPalette.controlBackground)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .strokeBorder(.white.opacity(0.1), lineWidth: 1)
+                                            .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
                                     )
                             )
                             .overlay(alignment: .trailing) {
@@ -106,50 +107,23 @@ struct SidebarView: View {
                                     refreshRecent()
                                 }
                             } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "magnifyingglass")
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Text("Search")
-                                        .font(.caption.weight(.medium))
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(.blue.opacity(0.18), in: Capsule())
-                                .foregroundStyle(.blue)
+                                Label("Search", systemImage: "magnifyingglass")
                             }
                             .keyboardShortcut(.return, modifiers: [])
-                            .buttonStyle(.plain)
+                            .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
                             Button {
                                 saveCurrentSearch()
                             } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "bookmark")
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Text("Save")
-                                        .font(.caption.weight(.medium))
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(.blue.opacity(0.1), in: Capsule())
-                                .foregroundStyle(.blue)
+                                Label("Save", systemImage: "bookmark")
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
 
-                            Button {
+                            Button(role: .destructive) {
                                 clearSearch()
                             } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 12, weight: .semibold))
-                                    Text("Clear")
-                                        .font(.caption.weight(.medium))
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(.red.opacity(0.1), in: Capsule())
-                                .foregroundStyle(.red)
+                                Label("Clear", systemImage: "trash")
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(Theme.GlassButtonStyle(kind: .destructive))
 
                             Spacer()
                         }
@@ -167,7 +141,6 @@ struct SidebarView: View {
                             }
                         #endif
                     }
-
                     .onChangeCompat(of: state.tags) { newValue in
                         scheduleAutocomplete(for: newValue)
                     }
@@ -243,17 +216,56 @@ struct SidebarView: View {
                             }
                         }
                     #endif
+
+                    if dependenciesStore.hasCredentials {
+                        Button(action: showMyFavorites) {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(.pink.opacity(0.15))
+                                        .frame(width: 32, height: 32)
+                                    Image(systemName: "heart.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(.pink)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("My Favorites")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    Text(favoritesSubtitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(.white.opacity(0.03))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help("Search posts you've favorited")
+                    }
                     
                     if !saved.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 12) {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(.orange.opacity(0.15))
+                                        .fill(Theme.ColorPalette.warning.opacity(0.15))
                                         .frame(width: 32, height: 32)
                                     Image(systemName: "bookmark.fill")
                                         .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.orange)
+                                        .foregroundStyle(Theme.ColorPalette.warning)
                                 }
 
                                 Text("Saved Searches")
@@ -315,10 +327,10 @@ struct SidebarView: View {
                         .padding(.horizontal, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(.white.opacity(0.03))
+                                .fill(Theme.ColorPalette.controlBackground.opacity(0.5))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                                        .strokeBorder(Theme.ColorPalette.glassBorder.opacity(0.5), lineWidth: 1)
                                 )
                         )
                     }
@@ -328,11 +340,11 @@ struct SidebarView: View {
                             HStack(spacing: 12) {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(.purple.opacity(0.15))
+                                        .fill(Theme.ColorPalette.accent.opacity(0.15))
                                         .frame(width: 32, height: 32)
                                     Image(systemName: "clock.fill")
                                         .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.purple)
+                                        .foregroundStyle(Theme.ColorPalette.accent)
                                 }
 
                                 Text("Recent Searches")
@@ -350,7 +362,7 @@ struct SidebarView: View {
                                 } label: {
                                     Image(systemName: "trash")
                                         .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(Theme.ColorPalette.danger)
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -376,10 +388,10 @@ struct SidebarView: View {
                         .padding(.horizontal, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(.white.opacity(0.03))
+                                .fill(Theme.ColorPalette.controlBackground.opacity(0.5))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+                                        .strokeBorder(Theme.ColorPalette.glassBorder.opacity(0.5), lineWidth: 1)
                                 )
                         )
                     }
@@ -406,12 +418,16 @@ struct SidebarView: View {
                                         .font(.caption)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
-                                        .background(
-                                            Capsule().fill(
-                                                state.sort == m
-                                                    ? Color.accentColor.opacity(0.25)
-                                                    : Color.secondary.opacity(0.15)
-                                            )
+                                        .themedChip(
+                                            tint: state.sort == m
+                                                ? Theme.ColorPalette.accent
+                                                : Theme.ColorPalette.muted,
+                                            style: state.sort == m ? .filled : .standard
+                                        )
+                                        .foregroundStyle(
+                                            state.sort == m
+                                                ? Color.white
+                                                : Theme.ColorPalette.textSecondary
                                         )
                                 }
                                 .buttonStyle(.plain)
@@ -431,9 +447,6 @@ struct SidebarView: View {
                             .onSubmit {
                                 state.resetForNewSearch()
                             }
-                            .onChangeCompat(of: state.poolID) { _ in
-                                
-                            }
                     }
                     
                     VStack(alignment: .leading, spacing: 6) {
@@ -451,6 +464,9 @@ struct SidebarView: View {
                         .pickerStyle(.segmented)
                         .controlSize(.small)
                         .labelsHidden()
+                        .onChangeCompat(of: state.rating) { _ in
+                            state.resetForNewSearch()
+                        }
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
@@ -540,6 +556,25 @@ struct SidebarView: View {
 }
 
 extension SidebarView {
+    fileprivate var favoritesSubtitle: String {
+        if let name = dependenciesStore.profile?.name {
+            return "ordfav:\(name)"
+        }
+        if let name = dependenciesStore.credentials.username {
+            return "ordfav:\(name)"
+        }
+        return "Your favorited posts"
+    }
+
+    fileprivate func showMyFavorites() {
+        let username = dependenciesStore.profile?.name ?? dependenciesStore.credentials.username
+        guard let username, !username.isEmpty else { return }
+        suggestions.removeAll()
+        state.tags = "ordfav:\(username)"
+        state.sort = .recent
+        state.resetForNewSearch()
+    }
+
     fileprivate func clearSearch() {
         suggestions.removeAll()
         state.tags = ""
@@ -698,6 +733,7 @@ private struct ModernSavedChip: View {
     let item: SavedSearch
     var action: () -> Void
     @State private var hovering = false
+    @Environment(\.lowPerformance) private var lowPerf
 
     var body: some View {
         Button(action: action) {
@@ -705,34 +741,28 @@ private struct ModernSavedChip: View {
                 if item.pinned {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Theme.ColorPalette.warning)
                 }
                 Text(label)
-                    .font(.caption.weight(.medium))
                     .lineLimit(1)
-                    .foregroundStyle(.primary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .themedChip(tint: Theme.ColorPalette.warning, style: .standard, size: .large)
+            .foregroundStyle(Theme.ColorPalette.textPrimary)
             .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.orange.opacity(hovering ? 0.12 : 0.08))
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(.orange.opacity(0.3), lineWidth: 1)
+                lowPerf ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.ultraThinMaterial),
+                in: Capsule(style: .continuous)
             )
         }
         .buttonStyle(.plain)
-        .scaleEffect(hovering ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.hovering = hovering
+        .scaleEffect(lowPerf ? 1.0 : (hovering ? 1.02 : 1.0))
+        .animation(lowPerf ? nil : Theme.Animations.interactive(lowPerformance: lowPerf), value: hovering)
+        .onHover { value in
+            if lowPerf {
+                hovering = value
+            } else {
+                withAnimation(Theme.Animations.hover(lowPerformance: lowPerf)) {
+                    hovering = value
+                }
             }
         }
         .help(label)
@@ -748,39 +778,34 @@ private struct ModernRecentChip: View {
     let item: RecentSearch
     var action: () -> Void
     @State private var hovering = false
+    @Environment(\.lowPerformance) private var lowPerf
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: "clock")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Theme.ColorPalette.accent)
                 Text(label)
-                    .font(.caption.weight(.medium))
                     .lineLimit(1)
-                    .foregroundStyle(.primary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .themedChip(tint: Theme.ColorPalette.accent, style: .standard, size: .large)
+            .foregroundStyle(Theme.ColorPalette.textPrimary)
             .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.purple.opacity(hovering ? 0.12 : 0.08))
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(.purple.opacity(0.3), lineWidth: 1)
+                lowPerf ? AnyShapeStyle(Color.clear) : AnyShapeStyle(.ultraThinMaterial),
+                in: Capsule(style: .continuous)
             )
         }
         .buttonStyle(.plain)
-        .scaleEffect(hovering ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                self.hovering = hovering
+        .scaleEffect(lowPerf ? 1.0 : (hovering ? 1.02 : 1.0))
+        .animation(lowPerf ? nil : Theme.Animations.interactive(lowPerformance: lowPerf), value: hovering)
+        .onHover { value in
+            if lowPerf {
+                hovering = value
+            } else {
+                withAnimation(Theme.Animations.hover(lowPerformance: lowPerf)) {
+                    hovering = value
+                }
             }
         }
         .help(label)
@@ -864,7 +889,8 @@ private struct SuggestList: View {
                             .padding(.vertical, 6)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
-                                idx == selectedIndex ? Color.accentColor.opacity(0.12) : Color.clear
+                                idx == selectedIndex
+                                    ? Theme.ColorPalette.accent.opacity(0.12) : Color.clear
                             )
                             .id(idx)
                         }

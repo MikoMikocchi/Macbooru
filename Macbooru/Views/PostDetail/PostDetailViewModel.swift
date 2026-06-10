@@ -9,7 +9,7 @@ final class PostDetailViewModel: ObservableObject {
     var onAuthenticationFailure: ((String) -> Void)?
 
     // MARK: - State
-    let post: Post
+    private(set) var post: Post
     
     @Published var comments: [Comment] = []
     @Published var isLoadingComments = false
@@ -50,11 +50,11 @@ final class PostDetailViewModel: ObservableObject {
 
     // MARK: - Computed
     var bestImageCandidates: [URL] {
-        [post.fileURL, post.largeURL, post.previewURL].compactMap { $0 }
+        [post.previewURL, post.largeURL, post.fileURL].compactMap { $0 }
     }
     
     var pageURL: URL {
-        URL(string: "https://danbooru.donmai.us/posts/\(post.id)")!
+        DanbooruConfig.resolvedBaseURL().appendingPathComponent("posts/\(post.id)")
     }
     
     var currentFavoriteState: Bool {
@@ -68,6 +68,17 @@ final class PostDetailViewModel: ObservableObject {
         favoriteCount = post.favCount
         upScore = post.upScore
         downScore = post.downScore
+    }
+
+    func replacePost(_ newPost: Post) {
+        post = newPost
+        syncPostState()
+        lastVoteScore = nil
+        comments = []
+        commentsPage = 1
+        hasMoreComments = true
+        commentsError = nil
+        newComment = ""
     }
     
     func refreshComments() async {
@@ -126,7 +137,7 @@ final class PostDetailViewModel: ObservableObject {
             newComment = ""
             comments.append(comment)
             comments.sort(by: commentOrder)
-            showToast("Comment posted")
+            showToast("Комментарий отправлен")
         } catch {
             commentsError = commentErrorMessage(for: error)
         }
@@ -179,11 +190,11 @@ final class PostDetailViewModel: ObservableObject {
     
     func downloadBestImage() async {
         guard !isDownloading else { return }
-        guard let url = bestImageCandidates.first else { return }
+        guard let url = post.fileURL ?? post.largeURL ?? post.previewURL else { return }
         isDownloading = true
         defer { isDownloading = false }
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let data = try await ThrottledImageLoader.shared.loadData(url)
             let fm = FileManager.default
             let downloads = try fm.url(
                 for: .downloadsDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
@@ -195,9 +206,9 @@ final class PostDetailViewModel: ObservableObject {
                 url.lastPathComponent.isEmpty ? "post-\(post.id).jpg" : url.lastPathComponent
             let dest = folder.appendingPathComponent(filename)
             try data.write(to: dest)
-            showToast("Saved to Downloads/Macbooru")
+            showToast("Сохранено в Загрузки/Macbooru")
         } catch {
-            showToast("Save failed: \(error.localizedDescription)")
+            showToast("Ошибка сохранения: \(error.localizedDescription)")
         }
     }
     
@@ -205,17 +216,17 @@ final class PostDetailViewModel: ObservableObject {
         #if os(macOS)
             guard let url = post.fileURL ?? post.largeURL ?? post.previewURL else { return }
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let data = try await ThrottledImageLoader.shared.loadData(url)
                 guard let image = NSImage(data: data) else {
-                    showToast("Cannot decode image")
+                    showToast("Не удалось декодировать изображение")
                     return
                 }
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.writeObjects([image])
-                showToast("Image copied")
+                showToast("Изображение скопировано")
             } catch {
-                showToast("Copy failed: \(error.localizedDescription)")
+                showToast("Ошибка копирования: \(error.localizedDescription)")
             }
         #endif
     }
@@ -273,23 +284,11 @@ final class PostDetailViewModel: ObservableObject {
     }
 
     private func commentErrorMessage(for error: Error) -> String {
-        if let apiError = error as? APIError {
-            switch apiError {
-            case .missingCredentials:
-                return "Authenticate with Danbooru (API key + username) to use this action."
-            case .serverError(let code):
-                if code == 401 || code == 403 {
-                    return "Недостаточно прав или неверные учетные данные."
-                }
-                return "Server error (status \(code)). Try again later."
-            case .decoding(let underlying):
-                return "Failed to parse server response: \(underlying.localizedDescription)"
-            case .invalidResponse:
-                return "Invalid server response."
-            }
-        }
         if let urlError = error as? URLError {
-            return "Network error: \(urlError.localizedDescription)"
+            if urlError.code == .notConnectedToInternet {
+                return "Нет соединения с интернетом."
+            }
+            return "Сетевая ошибка: \(urlError.localizedDescription)"
         }
         return error.localizedDescription
     }

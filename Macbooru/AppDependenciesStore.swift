@@ -55,6 +55,13 @@ final class AppDependenciesStore: ObservableObject {
         authenticationError = nil
     }
 
+    func rebuildDependencies() {
+        dependencies = factory(credentials.asConfig())
+        if credentials.hasCredentials {
+            Task { await refreshProfile() }
+        }
+    }
+
     var hasCredentials: Bool { credentials.hasCredentials }
 
     func refreshProfile() async {
@@ -74,25 +81,6 @@ final class AppDependenciesStore: ObservableObject {
     }
 
     private func friendlyMessage(for error: Error) -> String {
-        if let apiError = error as? APIError {
-            switch apiError {
-            case .missingCredentials:
-                return "Укажите Username и API key из настроек Danbooru (My Account → API Key)."
-            case .serverError(let status):
-                if status == 401 || status == 403 {
-                    return "Доступ запрещён. Проверьте, верно ли указан API key и имя пользователя."
-                }
-                if status == 429 {
-                    return
-                        "Превышен лимит запросов (rate limit). Подождите немного и попробуйте снова."
-                }
-                return "Сервер вернул ошибку (status \(status)). Попробуйте позднее."
-            case .invalidResponse:
-                return "Некорректный ответ сервера. Попробуйте ещё раз позже."
-            case .decoding:
-                return "Не удалось обработать ответ сервера. Проверьте API и повторите."
-            }
-        }
         if let urlError = error as? URLError {
             if urlError.code == .notConnectedToInternet {
                 return "Нет соединения с интернетом."

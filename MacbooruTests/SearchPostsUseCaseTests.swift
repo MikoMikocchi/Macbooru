@@ -181,7 +181,9 @@ private extension Post {
             source: nil,
             isFavorited: nil,
             upScore: nil,
-            downScore: nil
+            downScore: nil,
+            fileExt: nil,
+            hasLarge: nil
         )
     }
 }

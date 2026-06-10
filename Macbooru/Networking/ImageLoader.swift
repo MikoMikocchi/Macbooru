@@ -183,23 +183,15 @@ final class ThrottledImageLoader {
         return "\(url.absoluteString)#full"
     }
 
-    func load(_ url: URL, maxPixelSize: CGFloat? = nil) async throws -> PlatformImage {
-        let key = cacheKey(for: url, maxPixelSize: maxPixelSize)
-        if let cached = await ImageMemoryCache.shared.image(for: key) { return cached }
+    func loadData(_ url: URL) async throws -> Data {
         if let diskData = await ImageDiskCache.shared.data(for: url) {
-            if let diskImage = try? await decodeImage(data: diskData, maxPixelSize: maxPixelSize) {
-                await ImageMemoryCache.shared.set(diskImage, for: key)
-                logger.debug(
-                    "Loaded image from disk cache: \(url.lastPathComponent, privacy: .public)")
-                return diskImage
-            } else {
-                logger.debug(
-                    "Disk cache entry failed to decode for \(url.lastPathComponent, privacy: .public)"
-                )
-            }
+            logger.debug(
+                "Loaded data from disk cache: \(url.lastPathComponent, privacy: .public)")
+            return diskData
         }
         var req = URLRequest(url: url)
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        req.setValue(
+            DanbooruConfig.resolvedBaseURL().absoluteString, forHTTPHeaderField: "Referer")
         req.setValue("image/jpeg,image/png,*/*;q=0.5", forHTTPHeaderField: "Accept")
         req.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
         var lastError: Error? = nil
@@ -210,12 +202,10 @@ final class ThrottledImageLoader {
                 else {
                     throw URLError(.badServerResponse)
                 }
-                let image = try await decodeImage(data: data, maxPixelSize: maxPixelSize)
-                await ImageMemoryCache.shared.set(image, for: key)
                 await ImageDiskCache.shared.store(data, for: url)
                 logger.debug(
-                    "Loaded image from network: \(url.lastPathComponent, privacy: .public)")
-                return image
+                    "Loaded data from network: \(url.lastPathComponent, privacy: .public)")
+                return data
             } catch {
                 lastError = error
                 logger.error(
@@ -226,6 +216,15 @@ final class ThrottledImageLoader {
             }
         }
         throw lastError ?? URLError(.cannotLoadFromNetwork)
+    }
+
+    func load(_ url: URL, maxPixelSize: CGFloat? = nil) async throws -> PlatformImage {
+        let key = cacheKey(for: url, maxPixelSize: maxPixelSize)
+        if let cached = await ImageMemoryCache.shared.image(for: key) { return cached }
+        let data = try await loadData(url)
+        let image = try await decodeImage(data: data, maxPixelSize: maxPixelSize)
+        await ImageMemoryCache.shared.set(image, for: key)
+        return image
     }
 
     func load(from candidates: [URL], maxPixelSize: CGFloat? = nil) async throws -> PlatformImage {

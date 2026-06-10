@@ -15,27 +15,10 @@ struct PostTileView: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            RemoteImage(
-                candidates: [post.previewURL, post.largeURL, post.fileURL].compactMap { $0 },
-                height: height,
-                contentMode: .fit,
-                animateFirstAppearance: !search.lowPerformance,
-                animateUpgrades: false,
-                maxPixelSize: height * 2.2,
-                interpolation: search.lowPerformance ? .low : .medium,
-                decoratedBackground: false,
-                cornerRadius: 0
-            )
-            .blur(radius: blurRadius)
-            .overlay(sensitiveOverlay)
-            .onAppear {
-                if search.lowPerformance {
-                    imageLoaded = true
-                } else {
-                    withAnimation(Theme.Animations.hover(lowPerformance: search.lowPerformance).delay(0.05)) {
-                        imageLoaded = true
-                    }
-                }
+            if post.isUgoira {
+                ugoiraTileContent
+            } else {
+                imageContent
             }
 
             Theme.Gradients.modernOverlay(opacity: hover ? 0.7 : 0.52)
@@ -77,28 +60,71 @@ struct PostTileView: View {
             }
         }
         .contextMenu {
-            if let url = post.fileURL { Link("Open original in Browser", destination: url) }
-            if let url = post.largeURL { Link("Open large in Browser", destination: url) }
-            if let url = post.previewURL { Link("Open preview in Browser", destination: url) }
+            if let url = post.fileURL { Link("Открыть оригинал в браузере", destination: url) }
+            if let url = post.largeURL { Link("Открыть large в браузере", destination: url) }
+            if let url = post.previewURL { Link("Открыть превью в браузере", destination: url) }
             if let src = post.source, let u = URL(string: src) {
                 Divider()
-                Link("Open source", destination: u)
+                Link("Открыть источник", destination: u)
             }
             Divider()
             if let url = post.fileURL {
-                Button("Copy original URL") { copyToClipboard(url.absoluteString) }
+                Button("Скопировать URL оригинала") { copyToClipboard(url.absoluteString) }
             }
             if let url = post.largeURL {
-                Button("Copy large URL") { copyToClipboard(url.absoluteString) }
+                Button("Скопировать URL large") { copyToClipboard(url.absoluteString) }
             }
             if let url = post.previewURL {
-                Button("Copy preview URL") { copyToClipboard(url.absoluteString) }
+                Button("Скопировать URL превью") { copyToClipboard(url.absoluteString) }
             }
-            Button("Copy tags") {
+            Button("Скопировать теги") {
                 let tags = post.allTags.joined(separator: " ")
                 copyToClipboard(tags)
             }
         }
+    }
+
+    @ViewBuilder
+    private var imageContent: some View {
+        RemoteImage(
+            candidates: [post.previewURL, post.largeURL, post.fileURL].compactMap { $0 },
+            height: height,
+            contentMode: .fit,
+            animateFirstAppearance: !search.lowPerformance,
+            animateUpgrades: false,
+            maxPixelSize: height * 2.2,
+            interpolation: search.lowPerformance ? .low : .medium,
+            decoratedBackground: false,
+            cornerRadius: 0
+        )
+        .blur(radius: blurRadius)
+        .overlay(sensitiveOverlay)
+        .onAppear {
+            if search.lowPerformance {
+                imageLoaded = true
+            } else {
+                withAnimation(Theme.Animations.hover(lowPerformance: search.lowPerformance).delay(0.05)) {
+                    imageLoaded = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var ugoiraTileContent: some View {
+        ZStack {
+            Theme.ColorPalette.controlBackground.opacity(0.6)
+            VStack(spacing: 8) {
+                Image(systemName: "film.stack")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("Ugoira")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear { imageLoaded = true }
     }
 
     private var blurRadius: CGFloat {
@@ -168,7 +194,7 @@ private struct VisualBlurOverlay: View {
             VStack(spacing: 8) {
                 Image(systemName: "eye.slash")
                     .font(.title2.weight(.semibold))
-                Text("Sensitive")
+                Text("Чувствительный контент")
                     .font(.caption.weight(.medium))
             }
             .padding(12)

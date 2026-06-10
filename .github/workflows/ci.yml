@@ -42,6 +42,19 @@ jobs:
             build | xcpretty
         shell: bash
 
+
+      - name: Test (Debug)
+        run: |
+          set -eo pipefail
+          xcodebuild \
+            -project Macbooru.xcodeproj \
+            -scheme Macbooru \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGNING_IDENTITY="" \
+            test | xcpretty
+        shell: bash
+
       - name: Upload build logs (on failure)
         if: failure()
         uses: actions/upload-artifact@v4

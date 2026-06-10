@@ -20,6 +20,8 @@ struct SettingsView: View {
     @AppStorage("settings.autoRefreshOnLaunch") private var autoRefreshOnLaunch: Bool = true
     @AppStorage("settings.showKeyboardHints") private var showKeyboardHints: Bool = true
     @AppStorage("settings.blurSensitiveDefault") private var blurSensitiveDefault: Bool = true
+    @AppStorage(DanbooruConfig.baseURLStorageKey) private var danbooruBaseURL: String =
+        DanbooruConfig.defaultBaseURLString
 
     private var cardColumns: [GridItem] {
         [
@@ -68,6 +70,9 @@ struct SettingsView: View {
         .onAppear(perform: loadCacheSettings)
         .onChangeCompat(of: blurSensitiveDefault) { newValue in
             search.blurSensitive = newValue
+        }
+        .onChangeCompat(of: danbooruBaseURL) { _ in
+            dependenciesStore.rebuildDependencies()
         }
     }
 
@@ -157,6 +162,14 @@ struct SettingsView: View {
         ) {
             VStack(alignment: .leading, spacing: 18) {
                 Grid(horizontalSpacing: 16, verticalSpacing: 12) {
+                    GridRow {
+                        Text("Base URL").settingsLabel()
+                        TextField("https://danbooru.donmai.us", text: $danbooruBaseURL)
+                            .themedInputField(systemImage: "globe")
+                            .modifier(URLTextContentTypeIfAvailable())
+                            .disableAutocorrection(true)
+                            .frame(maxWidth: 280)
+                    }
                     GridRow {
                         Text("Username").settingsLabel()
                         TextField("Username", text: $username)
@@ -667,5 +680,15 @@ extension Text {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .foregroundStyle(.secondary)
             .font(.headline)
+    }
+}
+
+private struct URLTextContentTypeIfAvailable: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.textContentType(.URL)
+        } else {
+            content
+        }
     }
 }

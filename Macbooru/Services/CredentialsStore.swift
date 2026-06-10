@@ -18,9 +18,13 @@ struct DanbooruCredentials: Equatable {
         sanitized.username != nil && sanitized.apiKey != nil
     }
 
-    func asConfig() -> DanbooruConfig {
+    func asConfig(defaults: UserDefaults = .standard) -> DanbooruConfig {
         let clean = sanitized
-        return DanbooruConfig(apiKey: clean.apiKey, username: clean.username)
+        return DanbooruConfig(
+            baseURL: DanbooruConfig.resolvedBaseURL(defaults: defaults),
+            apiKey: clean.apiKey,
+            username: clean.username
+        )
     }
 }
 

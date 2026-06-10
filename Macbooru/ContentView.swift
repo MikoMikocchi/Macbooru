@@ -15,23 +15,16 @@ struct PostGridView: View {
     @ObservedObject var search: SearchState
     @Environment(\.appDependencies) private var dependencies
     @AppStorage("settings.autoRefreshOnLaunch") private var autoRefreshOnLaunch: Bool = true
-    
-    @State private var posts: [Post] = []
-    @State private var isLoading = false
-    @State private var isLoadingMore = false
-    @State private var hasMore = true
-    @State private var nextPageInFlight: Int? = nil
-    @State private var lastErrorMessage: String? = nil
+    @StateObject private var viewModel: PostGridViewModel
+
     @State private var columns: [GridItem] = []
-    @State private var originPage: Int? = nil
-    @State private var showBackToOrigin: Bool = false
-    @State private var knownMaxPage: Int? = nil
-    @State private var isFindingLast: Bool = false
-    @State private var replaceRequestID: Int = 0
-    @State private var loadGeneration: Int = 0
     @State private var didHandleInitialLoad = false
     private let gridSpacing: CGFloat = 24
-    private let windowRadius: Int = 2
+
+    init(search: SearchState) {
+        self.search = search
+        _viewModel = StateObject(wrappedValue: PostGridViewModel(search: search))
+    }
 
     #if os(macOS)
         // MARK: - Two-finger swipe support (trackpad) via local scrollWheel monitor
@@ -111,48 +104,45 @@ struct PostGridView: View {
 
     var body: some View {
         PostsGridScroll(
-            posts: posts,
+            posts: viewModel.posts,
             tileHeight: search.tileSize.height,
             columns: columns,
             gridSpacing: gridSpacing,
-            isLoading: isLoading || isLoadingMore,
+            isLoading: viewModel.isLoading || viewModel.isLoadingMore,
             infiniteEnabled: search.infiniteScrollEnabled,
             onReachedEnd: {
                 guard search.infiniteScrollEnabled else { return }
-                Task { await loadMoreIfNeeded() }
+                viewModel.loadMoreIfNeeded()
             }
         )
         #if os(macOS)
             .overlay(
                 TrackpadSwipeMonitor(
-                    onLeft: { nextAction() },
-                    onRight: { prevAction() }
+                    onLeft: { viewModel.nextAction() },
+                    onRight: { viewModel.prevAction() }
                 )
                 .allowsHitTesting(false)
                 .ignoresSafeArea()
             )
         #endif
 
-        .navigationTitle("Posts")
+        .navigationTitle("Посты")
+        .onAppear {
+            viewModel.inject(dependencies: dependencies)
+            recomputeColumns()
+        }
         .task {
             guard !didHandleInitialLoad else { return }
             didHandleInitialLoad = true
             guard autoRefreshOnLaunch else { return }
-            await load(page: 1, replace: true)
+            viewModel.scheduleInitialLoad()
         }
         .onChangeCompat(of: search.tileSize) { _ in
             recomputeColumns()
         }
         .onChangeCompat(of: search.searchTrigger) { _ in
-            knownMaxPage = nil
-            originPage = nil
-            showBackToOrigin = false
-            hasMore = true
-            isLoadingMore = false
-            nextPageInFlight = nil
-            refreshAction()
+            viewModel.handleSearchTriggerChange()
         }
-        .onAppear { recomputeColumns() }
         #if os(macOS)
             .simultaneousGesture(
                 DragGesture(minimumDistance: 30)
@@ -162,9 +152,9 @@ struct PostGridView: View {
                         let dy = value.translation.height
                         guard abs(dx) > 60, abs(dy) < 40 else { return }
                         if dx < 0 {
-                            nextAction()
+                            viewModel.nextAction()
                         } else {
-                            prevAction()
+                            viewModel.prevAction()
                         }
                     }
             )
@@ -183,82 +173,46 @@ struct PostGridView: View {
     }
 
     private var refreshButton: some View {
-        Button(action: refreshAction) {
-            Label("Refresh", systemImage: "arrow.clockwise")
+        Button(action: { viewModel.refreshAction() }) {
+            Label("Обновить", systemImage: "arrow.clockwise")
         }
     }
 
     @ViewBuilder
     private var paginationOverlay: some View {
         let drag = DragGesture(minimumDistance: 15).onEnded { value in
-            guard !isLoading else { return }
+            guard !viewModel.isLoading else { return }
             let w = value.translation.width
             let magnitude = abs(w)
             if magnitude < 40 { return }
             let steps = min(10, Int(magnitude / 120) + 1)
             let dir = w < 0 ? 1 : -1
-            let target = max(1, search.page + dir * steps)
-            if originPage == nil { originPage = search.page }
-            Task { await load(page: target, replace: true) }
-            if let origin = originPage, abs(target - origin) >= 3 {
-                withAnimation { showBackToOrigin = true }
-            }
+            viewModel.paginateByDrag(steps: steps, direction: dir)
         }
 
         PaginationHUD(
-            isLoading: isLoading,
-            isFindingLast: isFindingLast,
+            isLoading: viewModel.isLoading,
+            isFindingLast: viewModel.isFindingLast,
             currentPage: search.page,
-            pages: pagesWindowArray,
-            goFirst: {
-                guard !isLoading else { return }
-                if originPage == nil { originPage = search.page }
-                Task { await load(page: 1, replace: true) }
-                if let origin = originPage, origin > 3 { withAnimation { showBackToOrigin = true } }
-            },
-            goPrev: { prevAction() },
-            selectPage: { p in
-                guard !isLoading else { return }
-                Task { await load(page: max(1, p), replace: true) }
-            },
-            goNext: { nextAction() },
-            goLast: {
-                guard !isLoading else { return }
-                if originPage == nil { originPage = search.page }
-                Task {
-                    if let known = knownMaxPage {
-                        await load(page: known, replace: true)
-                        if let origin = originPage, known - origin >= 3 {
-                            withAnimation { showBackToOrigin = true }
-                        }
-                    } else {
-                        isFindingLast = true
-                        if let last = await findLastPage() {
-                            knownMaxPage = last
-                            await load(page: last, replace: true)
-                            if let origin = originPage, last - origin >= 3 {
-                                withAnimation { showBackToOrigin = true }
-                            }
-                        } else {
-                            withAnimation { lastErrorMessage = "Unable to find last page" }
-                        }
-                        isFindingLast = false
-                    }
-                }
-            }
+            pages: viewModel.pagesWindowArray,
+            goFirst: { viewModel.goFirst() },
+            goPrev: { viewModel.prevAction() },
+            selectPage: { viewModel.selectPage($0) },
+            goNext: { viewModel.nextAction() },
+            goLast: { viewModel.goLast() }
         )
         .gesture(drag)
-        .accessibilityLabel("Page controls")
+        .accessibilityLabel("Управление страницами")
     }
 
     @ViewBuilder
     private var errorOverlay: some View {
-        if let msg = lastErrorMessage {
-            ErrorToast(message: msg, retry: { refreshAction() })
+        if let msg = viewModel.lastErrorMessage {
+            ErrorToast(message: msg, retry: { viewModel.refreshAction() })
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .onAppear {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        withAnimation { lastErrorMessage = nil }
+                        withAnimation { viewModel.lastErrorMessage = nil }
                     }
                 }
         }
@@ -266,110 +220,17 @@ struct PostGridView: View {
 
     @ViewBuilder
     private var backToOriginOverlay: some View {
-        if showBackToOrigin, let origin = originPage, origin != search.page {
+        if viewModel.showBackToOrigin, let origin = viewModel.originPage, origin != search.page {
             BackToOriginChip(page: origin) {
-                Task { await load(page: origin, replace: true) }
-                withAnimation {
-                    showBackToOrigin = false
-                    originPage = nil
-                }
+                viewModel.backToOrigin()
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
-                    withAnimation { showBackToOrigin = false }
+                    withAnimation { viewModel.showBackToOrigin = false }
                 }
             }
         }
-    }
-
-    @MainActor
-    private func refresh() async {
-        search.page = 1
-        posts.removeAll()
-        hasMore = true
-        isLoadingMore = false
-        nextPageInFlight = nil
-        await load(page: 1, replace: true)
-    }
-
-    @MainActor
-    private func load(page: Int, replace: Bool = true) async {
-        let generationSnapshot = loadGeneration
-        let requestIDSnapshot: Int
-        if replace {
-            replaceRequestID &+= 1
-            requestIDSnapshot = replaceRequestID
-            loadGeneration &+= 1
-            isLoading = true
-        } else {
-            requestIDSnapshot = replaceRequestID
-            guard !isLoadingMore, hasMore else { return }
-            isLoadingMore = true
-            nextPageInFlight = page
-        }
-        defer {
-            if replace {
-                if requestIDSnapshot == replaceRequestID {
-                    isLoading = false
-                }
-            } else {
-                isLoadingMore = false
-            }
-            if !replace { nextPageInFlight = nil }
-        }
-        do {
-            let next = try await dependencies.searchPosts.execute(
-                query: search.danbooruQuery,
-                page: page,
-                limit: search.pageSize
-            )
-            if replace {
-                guard requestIDSnapshot == replaceRequestID else { return }
-            } else {
-                guard generationSnapshot == loadGeneration else { return }
-            }
-            if replace {
-                posts = next
-            } else {
-                posts.append(contentsOf: next)
-            }
-            
-            hasMore = next.count == search.pageSize
-            self.search.page = max(1, page)
-        } catch is CancellationError {
-            return
-        } catch let error as URLError where error.code == .cancelled {
-            return
-        } catch {
-            if replace {
-                guard requestIDSnapshot == replaceRequestID else { return }
-            } else {
-                guard generationSnapshot == loadGeneration else { return }
-            }
-            withAnimation {
-                lastErrorMessage = "Failed to load posts: \(error.localizedDescription)"
-            }
-            if !replace {
-                hasMore = false
-            }
-            print("Failed to load posts for page \(page): \(error)")
-        }
-    }
-
-    @MainActor
-    private func loadMoreIfNeeded() async {
-        guard search.infiniteScrollEnabled else { return }
-        guard hasMore, !isLoadingMore else { return }
-        let candidate = search.page + 1
-        if let inflight = nextPageInFlight, inflight >= candidate {
-            return
-        }
-        nextPageInFlight = candidate
-        #if DEBUG
-            print("[InfiniteScroll] loading page=\(candidate) (current=\(search.page))")
-        #endif
-        await load(page: candidate, replace: false)
     }
 
     private func recomputeColumns() {
@@ -378,97 +239,12 @@ struct PostGridView: View {
         ]
     }
 
-    // MARK: - Actions
-    private func prevAction() {
-        guard !search.infiniteScrollEnabled else { return }
-        guard !isLoading, search.page > 1 else { return }
-        Task { await load(page: max(1, search.page - 1), replace: true) }
-    }
-
-    private func nextAction() {
-        guard !search.infiniteScrollEnabled else { return }
-        guard !isLoading else { return }
-        Task { await load(page: search.page + 1, replace: true) }
-    }
-
-    private func refreshAction() {
-        Task { await refresh() }
-    }
-
     private var gridActions: GridActions {
-        GridActions(prev: prevAction, next: nextAction, refresh: refreshAction)
-    }
-
-    // MARK: - Pagination window
-    private var pagesWindowArray: [Int] {
-        let current = search.page
-        let start = max(1, current - windowRadius)
-        let end = max(start, current + windowRadius)
-        return Array(start...end)
-    }
-
-    
-    @MainActor
-    private func findLastPage() async -> Int? {
-        
-        if posts.count < search.pageSize { return max(1, search.page) }
-
-        let limit = search.pageSize
-        var low = max(1, search.page)
-        var high = low + 1
-        var requests = 0
-        let maxRequests = 12
-
-        func fetchCount(_ page: Int) async -> Int? {
-            do {
-                let arr = try await dependencies.searchPosts.execute(
-                    query: search.danbooruQuery, page: page, limit: limit)
-                return arr.count
-            } catch {
-                print("findLastPage fetch failed page=\(page): \(error)")
-                return nil
-            }
-        }
-
-        
-        while requests < maxRequests {
-            requests += 1
-            if let cnt = await fetchCount(high) {
-                if cnt == 0 {
-                    break  
-                } else if cnt < limit {
-                    
-                    return high
-                } else {
-                    low = high
-                    high = high + 8  
-                }
-            } else {
-                break
-            }
-        }
-
-        
-        if high <= low { high = low + 8 }
-
-        
-        var left = low
-        var right = high
-        var answer = low
-        while left <= right && requests < maxRequests {
-            let mid = (left + right) / 2
-            requests += 1
-            guard let cnt = await fetchCount(mid) else { break }
-            if cnt == 0 {
-                right = mid - 1
-            } else if cnt < limit {
-                return mid
-            } else {
-                answer = mid
-                left = mid + 1
-            }
-        }
-        return answer
+        GridActions(
+            prev: { viewModel.prevAction() },
+            next: { viewModel.nextAction() },
+            refresh: { viewModel.refreshAction() }
+        )
     }
 }
 
@@ -489,14 +265,13 @@ private struct PostsGridScroll: View {
         let nearEndStartIndex = max(0, posts.count - 5)
         ScrollView {
             LazyVGrid(columns: columns, spacing: gridSpacing) {
-                ForEach(posts.indices, id: \.self) { index in
-                    let post = posts[index]
+                ForEach(posts) { post in
+                    let index = posts.firstIndex(where: { $0.id == post.id }) ?? 0
                     NavigationLink(value: post) {
                         PostTileView(post: post, height: tileHeight)
                             .frame(maxWidth: .infinity)
                             .contentShape(Rectangle())
                     }
-                    .id(post.id)
                     .buttonStyle(.plain)
                     .frame(height: tileHeight)
                     .modifier(AnimatedItemModifier(index: index))
@@ -589,7 +364,7 @@ private struct ErrorToast: View {
                 .foregroundStyle(.orange)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Error")
+                Text("Ошибка")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(message)
@@ -597,7 +372,7 @@ private struct ErrorToast: View {
                     .foregroundStyle(.primary)
             }
 
-            Button("Retry") {
+            Button("Повторить") {
                 retry()
             }
             .buttonStyle(.bordered)
@@ -633,7 +408,7 @@ private struct BackToOriginChip: View {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Back to p\(page)")
+                Text("Вернуться к стр. \(page)")
                     .font(.footnote.weight(.medium))
             }
             .themedChip(tint: Theme.ColorPalette.accent, style: .standard, size: .large)

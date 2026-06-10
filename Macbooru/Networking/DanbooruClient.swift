@@ -2,9 +2,32 @@ import Foundation
 import os
 
 struct DanbooruConfig {
-    var baseURL: URL = URL(string: "https://danbooru.donmai.us")!
+    static let baseURLStorageKey = "settings.danbooruBaseURL"
+    static let defaultBaseURLString = "https://danbooru.donmai.us"
+
+    var baseURL: URL
     var apiKey: String? = nil
     var username: String? = nil
+
+    init(
+        baseURL: URL? = nil,
+        apiKey: String? = nil,
+        username: String? = nil,
+        defaults: UserDefaults = .standard
+    ) {
+        self.baseURL = baseURL ?? Self.resolvedBaseURL(defaults: defaults)
+        self.apiKey = apiKey
+        self.username = username
+    }
+
+    static func resolvedBaseURL(defaults: UserDefaults = .standard) -> URL {
+        let raw = defaults.string(forKey: baseURLStorageKey) ?? defaultBaseURLString
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let url = URL(string: trimmed), url.scheme != nil {
+            return url
+        }
+        return URL(string: defaultBaseURLString)!
+    }
 }
 
 private extension Logger {
@@ -22,11 +45,31 @@ private extension String {
     }
 }
 
-enum APIError: Error {
+enum APIError: Error, LocalizedError {
     case invalidResponse
     case serverError(Int)
     case decoding(Error)
     case missingCredentials
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCredentials:
+            return "Укажите Username и API key из настроек Danbooru (My Account → API Key)."
+        case .serverError(let status):
+            if status == 401 || status == 403 {
+                return "Доступ запрещён. Проверьте, верно ли указан API key и имя пользователя."
+            }
+            if status == 429 {
+                return
+                    "Превышен лимит запросов (rate limit). Подождите немного и попробуйте снова."
+            }
+            return "Сервер вернул ошибку (status \(status)). Попробуйте позднее."
+        case .invalidResponse:
+            return "Некорректный ответ сервера. Попробуйте ещё раз позже."
+        case .decoding:
+            return "Не удалось обработать ответ сервера. Проверьте API и повторите."
+        }
+    }
 }
 
 final class DanbooruClient {
@@ -99,7 +142,7 @@ final class DanbooruClient {
         guard let url = comps.url else { throw APIError.invalidResponse }
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         req.timeoutInterval = 30
         logger.debug(
             "GET /posts page=\(page, privacy: .public) limit=\(limit, privacy: .public) tags=\(tags ?? "∅", privacy: .public)"
@@ -143,7 +186,7 @@ final class DanbooruClient {
         guard let url = comps.url else { throw APIError.invalidResponse }
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         logger.debug(
             "GET /tags prefix=\(prefix, privacy: .public) limit=\(limit, privacy: .public)"
         )
@@ -167,7 +210,7 @@ final class DanbooruClient {
         req.httpBody = "post_id=\(postID)".data(using: .utf8)
         req.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         req.timeoutInterval = 30
         try applyAuth(to: &req)
         logger.debug("POST /favorites for post=\(postID, privacy: .public)")
@@ -185,7 +228,7 @@ final class DanbooruClient {
         )
         req.httpMethod = "DELETE"
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         try applyAuth(to: &req)
         logger.debug("DELETE /favorites/\(postID, privacy: .public)")
         let (_, resp) = try await session.data(for: req)
@@ -204,7 +247,7 @@ final class DanbooruClient {
         req.httpBody = "score=\(score)".data(using: .utf8)
         req.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         try applyAuth(to: &req)
         logger.debug("POST /posts/\(postID, privacy: .public)/votes score=\(score, privacy: .public)")
         let (_, resp) = try await session.data(for: req)
@@ -232,7 +275,7 @@ final class DanbooruClient {
         guard let url = comps.url else { throw APIError.invalidResponse }
         var req = URLRequest(url: url)
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         logger.debug(
             "GET /comments post=\(postID, privacy: .public) page=\(page, privacy: .public) limit=\(limit, privacy: .public)"
         )
@@ -254,7 +297,7 @@ final class DanbooruClient {
         )
         req.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         try applyAuth(to: &req)
         logger.debug("POST /comments post=\(postID, privacy: .public)")
         let (data, resp) = try await session.data(for: req)
@@ -270,7 +313,7 @@ final class DanbooruClient {
     func fetchCurrentUser() async throws -> UserProfile {
         var req = URLRequest(url: config.baseURL.appendingPathComponent("/users/current.json"))
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("https://danbooru.donmai.us", forHTTPHeaderField: "Referer")
+        applyReferer(to: &req)
         try applyAuth(to: &req)
         logger.debug("GET /users/current")
         let (data, resp) = try await session.data(for: req)
@@ -281,6 +324,12 @@ final class DanbooruClient {
         }
         let decoder = DanbooruClient.makeDecoder()
         return try decoder.decode(UserProfile.self, from: data)
+    }
+
+    private var referer: String { config.baseURL.absoluteString }
+
+    private func applyReferer(to request: inout URLRequest) {
+        request.setValue(referer, forHTTPHeaderField: "Referer")
     }
 
     private func applyAuth(to request: inout URLRequest) throws {

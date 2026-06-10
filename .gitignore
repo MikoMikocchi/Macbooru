@@ -6,3 +6,6 @@ docs/ROADMAP.md
 *.xcuserstate
 xcuserdata/
 *.xcworkspace/xcuserdata/
+
+.derivedData/
+DerivedData/
