@@ -126,7 +126,7 @@ struct PostGridView: View {
             )
         #endif
 
-        .navigationTitle("Посты")
+        .navigationTitle(L10n.Grid.postsTitle)
         .onAppear {
             viewModel.inject(dependencies: dependencies)
             recomputeColumns()
@@ -174,7 +174,7 @@ struct PostGridView: View {
 
     private var refreshButton: some View {
         Button(action: { viewModel.refreshAction() }) {
-            Label("Обновить", systemImage: "arrow.clockwise")
+            Label(L10n.Grid.refresh, systemImage: "arrow.clockwise")
         }
     }
 
@@ -202,7 +202,7 @@ struct PostGridView: View {
             goLast: { viewModel.goLast() }
         )
         .gesture(drag)
-        .accessibilityLabel("Управление страницами")
+        .accessibilityLabel(L10n.Grid.pageControls)
     }
 
     @ViewBuilder
@@ -364,7 +364,7 @@ private struct ErrorToast: View {
                 .foregroundStyle(.orange)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Ошибка")
+                Text(L10n.Grid.errorTitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(message)
@@ -372,7 +372,7 @@ private struct ErrorToast: View {
                     .foregroundStyle(.primary)
             }
 
-            Button("Повторить") {
+            Button(L10n.Grid.retry) {
                 retry()
             }
             .buttonStyle(.bordered)
@@ -408,7 +408,7 @@ private struct BackToOriginChip: View {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 12, weight: .semibold))
-                Text("Вернуться к стр. \(page)")
+                Text(L10n.Grid.backToPage(page))
                     .font(.footnote.weight(.medium))
             }
             .themedChip(tint: Theme.ColorPalette.accent, style: .standard, size: .large)

@@ -142,7 +142,7 @@ final class PostGridViewModel: ObservableObject {
                         withAnimation { showBackToOrigin = true }
                     }
                 } else {
-                    withAnimation { lastErrorMessage = "Unable to find last page" }
+                    withAnimation { lastErrorMessage = L10n.Grid.unableFindLastPage }
                 }
                 isFindingLast = false
             }
@@ -241,7 +241,7 @@ final class PostGridViewModel: ObservableObject {
                 guard generationSnapshot == loadGeneration else { return }
             }
             withAnimation {
-                lastErrorMessage = "Не удалось загрузить посты: \(error.localizedDescription)"
+                lastErrorMessage = L10n.Grid.loadFailed(error.localizedDescription)
             }
             if !replace {
                 hasMore = false

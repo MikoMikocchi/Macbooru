@@ -5,15 +5,7 @@ import SwiftUI
 enum Rating: String, CaseIterable, Identifiable, Codable, Hashable {
     case any, g, s, q, e
     var id: String { rawValue }
-    var display: String {
-        switch self {
-        case .any: return "Any"
-        case .g: return "G"
-        case .s: return "S"
-        case .q: return "Q"
-        case .e: return "E"
-        }
-    }
+    var display: String { L10n.RatingLabels.display(for: self) }
     var tag: String? {
         switch self {
         case .any: return nil
@@ -35,17 +27,7 @@ enum SortMode: String, CaseIterable, Identifiable, Codable, Hashable {
     case random  
 
     var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .recent: return "Recent"
-        case .newest: return "Newest"
-        case .oldest: return "Oldest"
-        case .rank: return "Rank"
-        case .score: return "Score"
-        case .favs: return "Favs"
-        case .random: return "Random"
-        }
-    }
+    var label: String { L10n.Sort.label(for: self) }
     var orderTag: String? {
         switch self {
         case .recent: return nil
@@ -62,7 +44,7 @@ enum SortMode: String, CaseIterable, Identifiable, Codable, Hashable {
 enum TileSize: String, CaseIterable, Identifiable, Hashable {
     case small, medium, large
     var id: String { rawValue }
-    var title: String { rawValue.capitalized }
+    var title: String { L10n.TileSizeLabels.title(for: self) }
     var height: CGFloat {
         switch self {
         case .small: return 120

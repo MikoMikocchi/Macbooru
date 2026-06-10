@@ -54,20 +54,19 @@ enum APIError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingCredentials:
-            return "Укажите Username и API key из настроек Danbooru (My Account → API Key)."
+            return L10n.Error.missingCredentials
         case .serverError(let status):
             if status == 401 || status == 403 {
-                return "Доступ запрещён. Проверьте, верно ли указан API key и имя пользователя."
+                return L10n.Error.accessDenied
             }
             if status == 429 {
-                return
-                    "Превышен лимит запросов (rate limit). Подождите немного и попробуйте снова."
+                return L10n.Error.rateLimit
             }
-            return "Сервер вернул ошибку (status \(status)). Попробуйте позднее."
+            return L10n.Error.serverStatus(status)
         case .invalidResponse:
-            return "Некорректный ответ сервера. Попробуйте ещё раз позже."
+            return L10n.Error.invalidResponse
         case .decoding:
-            return "Не удалось обработать ответ сервера. Проверьте API и повторите."
+            return L10n.Error.decoding
         }
     }
 }

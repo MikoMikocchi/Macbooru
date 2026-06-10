@@ -611,6 +611,7 @@ enum Theme {
         }
 
         var kind: Kind = .primary
+        var compact: Bool = false
         @Environment(\.lowPerformance) private var lowPerf
 
         func makeBody(configuration: Configuration) -> some View {
@@ -669,10 +670,12 @@ enum Theme {
             }()
 
             return configuration.label
-                .font(.callout.weight(.semibold))
+                .font((compact ? Font.subheadline : Font.callout).weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .foregroundStyle(foreground.opacity(effectivePressed ? 0.8 : 1.0))
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
+                .padding(.horizontal, compact ? 10 : 18)
+                .padding(.vertical, compact ? 8 : 10)
                 .background(background)
                 .overlay(
                     shape.strokeBorder(

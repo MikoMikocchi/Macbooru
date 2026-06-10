@@ -81,12 +81,6 @@ final class AppDependenciesStore: ObservableObject {
     }
 
     private func friendlyMessage(for error: Error) -> String {
-        if let urlError = error as? URLError {
-            if urlError.code == .notConnectedToInternet {
-                return "Нет соединения с интернетом."
-            }
-            return "Сетевая ошибка: \(urlError.localizedDescription)"
-        }
-        return error.localizedDescription
+        NetworkErrorMessage.friendly(for: error)
     }
 }

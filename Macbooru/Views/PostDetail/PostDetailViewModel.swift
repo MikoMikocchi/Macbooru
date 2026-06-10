@@ -126,7 +126,7 @@ final class PostDetailViewModel: ObservableObject {
         guard !isSubmittingComment else { return }
         
         guard hasCredentials else {
-             commentsError = "Authenticate with Danbooru (API key + username) to use this action."
+             commentsError = L10n.Error.commentAuthRequired
              return
         }
 
@@ -137,7 +137,7 @@ final class PostDetailViewModel: ObservableObject {
             newComment = ""
             comments.append(comment)
             comments.sort(by: commentOrder)
-            showToast("Комментарий отправлен")
+            showToast(L10n.Toast.commentSent)
         } catch {
             commentsError = commentErrorMessage(for: error)
         }
@@ -146,7 +146,7 @@ final class PostDetailViewModel: ObservableObject {
     
     func performFavorite(add: Bool) async {
         guard hasCredentials else {
-            showToast("Добавьте учетные данные Danbooru в Настройках")
+            showToast(L10n.Toast.addCredentials)
             return
         }
         guard !isInteractionInProgress else { return }
@@ -156,11 +156,11 @@ final class PostDetailViewModel: ObservableObject {
             if add {
                 try await dependencies.favoritePost.favorite(postID: post.id)
                 updateFavoriteState(isFavorited: true)
-                showToast("Добавлено в избранное")
+                showToast(L10n.Toast.addedFavorite)
             } else {
                 try await dependencies.favoritePost.unfavorite(postID: post.id)
                 updateFavoriteState(isFavorited: false)
-                showToast("Удалено из избранного")
+                showToast(L10n.Toast.removedFavorite)
             }
         } catch {
             handleAuthErrorIfNeeded(error)
@@ -170,7 +170,7 @@ final class PostDetailViewModel: ObservableObject {
     
     func performVote(score: Int) async {
         guard hasCredentials else {
-            showToast("Добавьте учетные данные Danbooru в Настройках")
+            showToast(L10n.Toast.addCredentials)
             return
         }
         guard !isInteractionInProgress else { return }
@@ -178,7 +178,7 @@ final class PostDetailViewModel: ObservableObject {
         defer { isInteractionInProgress = false }
         do {
             try await dependencies.votePost.vote(postID: post.id, score: score)
-            let message = score >= 0 ? "Оценка +1 отправлена" : "Оценка -1 отправлена"
+            let message = score >= 0 ? L10n.Toast.voteUpSent : L10n.Toast.voteDownSent
             updateVoteState(score: score)
             lastVoteScore = score
             showToast(message)
@@ -206,9 +206,9 @@ final class PostDetailViewModel: ObservableObject {
                 url.lastPathComponent.isEmpty ? "post-\(post.id).jpg" : url.lastPathComponent
             let dest = folder.appendingPathComponent(filename)
             try data.write(to: dest)
-            showToast("Сохранено в Загрузки/Macbooru")
+            showToast(L10n.Toast.savedToDownloads)
         } catch {
-            showToast("Ошибка сохранения: \(error.localizedDescription)")
+            showToast(L10n.Toast.saveFailed(error.localizedDescription))
         }
     }
     
@@ -218,15 +218,15 @@ final class PostDetailViewModel: ObservableObject {
             do {
                 let data = try await ThrottledImageLoader.shared.loadData(url)
                 guard let image = NSImage(data: data) else {
-                    showToast("Не удалось декодировать изображение")
+                    showToast(L10n.Toast.decodeImageFailed)
                     return
                 }
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.writeObjects([image])
-                showToast("Изображение скопировано")
+                showToast(L10n.Toast.imageCopied)
             } catch {
-                showToast("Ошибка копирования: \(error.localizedDescription)")
+                showToast(L10n.Toast.copyFailed(error.localizedDescription))
             }
         #endif
     }
@@ -276,20 +276,14 @@ final class PostDetailViewModel: ObservableObject {
 
     private func handleAuthErrorIfNeeded(_ error: Error) {
         if case APIError.serverError(let code) = error, code == 401 || code == 403 {
-            onAuthenticationFailure?("Недействительные учетные данные Danbooru")
+            onAuthenticationFailure?(L10n.Error.invalidCredentials)
         }
         if let apiError = error as? APIError, case .missingCredentials = apiError {
-             onAuthenticationFailure?("Укажите учетные данные Danbooru")
+             onAuthenticationFailure?(L10n.Error.credentialsRequired)
         }
     }
 
     private func commentErrorMessage(for error: Error) -> String {
-        if let urlError = error as? URLError {
-            if urlError.code == .notConnectedToInternet {
-                return "Нет соединения с интернетом."
-            }
-            return "Сетевая ошибка: \(urlError.localizedDescription)"
-        }
-        return error.localizedDescription
+        NetworkErrorMessage.friendly(for: error)
     }
 }

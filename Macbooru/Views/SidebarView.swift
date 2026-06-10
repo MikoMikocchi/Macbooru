@@ -55,11 +55,11 @@ struct SidebarView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Search")
+                            Text(L10n.Sidebar.Search.title)
                                 .font(.headline)
                                 .fontWeight(.bold)
                                 .foregroundStyle(.primary)
-                            Text("Find posts with tags")
+                            Text(L10n.Sidebar.Search.subtitle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -69,7 +69,7 @@ struct SidebarView: View {
 
                     
                     VStack(spacing: 12) {
-                        TextField("Enter tags…", text: $state.tags)
+                        TextField(L10n.Sidebar.Search.placeholder, text: $state.tags)
                             .textFieldStyle(.plain)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
@@ -95,9 +95,8 @@ struct SidebarView: View {
                             }
 
                         
-                        HStack(spacing: 8) {
+                        VStack(spacing: 8) {
                             Button {
-                                
                                 suggestions.removeAll()
                                 state.resetForNewSearch()
                                 let q = state.tags.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -107,33 +106,37 @@ struct SidebarView: View {
                                     refreshRecent()
                                 }
                             } label: {
-                                Label("Search", systemImage: "magnifyingglass")
+                                Label(L10n.Sidebar.Search.button, systemImage: "magnifyingglass")
                             }
                             .keyboardShortcut(.return, modifiers: [])
                             .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
-                            Button {
-                                saveCurrentSearch()
-                            } label: {
-                                Label("Save", systemImage: "bookmark")
-                            }
-                            .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
+                            .frame(maxWidth: .infinity)
 
-                            Button(role: .destructive) {
-                                clearSearch()
-                            } label: {
-                                Label("Clear", systemImage: "trash")
-                            }
-                            .buttonStyle(Theme.GlassButtonStyle(kind: .destructive))
+                            HStack(spacing: 8) {
+                                Button {
+                                    saveCurrentSearch()
+                                } label: {
+                                    Label(L10n.Sidebar.save, systemImage: "bookmark")
+                                }
+                                .buttonStyle(Theme.GlassButtonStyle(kind: .secondary, compact: true))
+                                .frame(maxWidth: .infinity)
 
-                            Spacer()
+                                Button(role: .destructive) {
+                                    clearSearch()
+                                } label: {
+                                    Label(L10n.Sidebar.clear, systemImage: "trash")
+                                }
+                                .buttonStyle(Theme.GlassButtonStyle(kind: .destructive, compact: true))
+                                .frame(maxWidth: .infinity)
+                            }
                         }
                         #if os(macOS)
                             if showKeyboardHints {
                                 Group {
                                     if #available(macOS 14.0, *) {
-                                        Text("Enter: search • ↑/↓: navigate • Tab/Enter: apply suggestion")
+                                        Text(L10n.Sidebar.keyboardHintFull)
                                     } else {
-                                        Text("Enter: search")
+                                        Text(L10n.Sidebar.keyboardHintShort)
                                     }
                                 }
                                     .font(.caption2)
@@ -229,7 +232,7 @@ struct SidebarView: View {
                                         .foregroundStyle(.pink)
                                 }
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text("My Favorites")
+                                    Text(L10n.Sidebar.Favorites.title)
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(.primary)
                                     Text(favoritesSubtitle)
@@ -253,7 +256,7 @@ struct SidebarView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .help("Search posts you've favorited")
+                        .help(L10n.Sidebar.Favorites.help)
                     }
                     
                     if !saved.isEmpty {
@@ -268,7 +271,7 @@ struct SidebarView: View {
                                         .foregroundStyle(Theme.ColorPalette.warning)
                                 }
 
-                                Text("Saved Searches")
+                                Text(L10n.Sidebar.savedSearches)
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.primary)
@@ -297,10 +300,10 @@ struct SidebarView: View {
                                         performSavedSearch(item)
                                     }
                                     .contextMenu {
-                                        Button(item.pinned ? "Unpin" : "Pin") {
+                                        Button(item.pinned ? L10n.Sidebar.unpin : L10n.Sidebar.pin) {
                                             togglePin(item)
                                         }
-                                        Button("Delete", role: .destructive) {
+                                        Button(L10n.Sidebar.delete, role: .destructive) {
                                             deleteSaved(item)
                                         }
                                     }
@@ -347,7 +350,7 @@ struct SidebarView: View {
                                         .foregroundStyle(Theme.ColorPalette.accent)
                                 }
 
-                                Text("Recent Searches")
+                                Text(L10n.Sidebar.recentSearches)
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(.primary)
@@ -373,7 +376,7 @@ struct SidebarView: View {
                                         performRecentSearch(item)
                                     }
                                     .contextMenu {
-                                        Button("Delete", role: .destructive) {
+                                        Button(L10n.Sidebar.delete, role: .destructive) {
                                             recentStore.remove(id: item.id)
                                             refreshRecent()
                                         }
@@ -400,7 +403,7 @@ struct SidebarView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "arrow.up.arrow.down.circle.fill").foregroundStyle(
                                 .secondary)
-                            Text("Sort").font(.subheadline).fontWeight(.semibold).foregroundStyle(
+                            Text(L10n.Sidebar.sort).font(.subheadline).fontWeight(.semibold).foregroundStyle(
                                 .secondary)
                         }
                         .lineLimit(1)
@@ -438,7 +441,7 @@ struct SidebarView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "tray.full.fill").foregroundStyle(.secondary)
-                            Text("Pool ID").font(.subheadline).fontWeight(.semibold)
+                            Text(L10n.Sidebar.poolID).font(.subheadline).fontWeight(.semibold)
                                 .foregroundStyle(
                                     .secondary)
                         }
@@ -452,13 +455,13 @@ struct SidebarView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "hand.raised.fill").foregroundStyle(.secondary)
-                            Text("Rating").font(.subheadline).fontWeight(.semibold).foregroundStyle(
+                            Text(L10n.Sidebar.rating).font(.subheadline).fontWeight(.semibold).foregroundStyle(
                                 .secondary)
                         }
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("Rating", selection: $state.rating) {
+                        Picker(L10n.Sidebar.rating, selection: $state.rating) {
                             ForEach(Rating.allCases) { r in Text(r.display).tag(r) }
                         }
                         .pickerStyle(.segmented)
@@ -471,13 +474,13 @@ struct SidebarView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "square.grid.3x3.fill").foregroundStyle(.secondary)
-                            Text("Tile size").font(.subheadline).fontWeight(.semibold)
+                            Text(L10n.Sidebar.tileSize).font(.subheadline).fontWeight(.semibold)
                                 .foregroundStyle(.secondary)
                         }
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("Tile size", selection: $state.tileSize) {
+                        Picker(L10n.Sidebar.tileSize, selection: $state.tileSize) {
                             ForEach(TileSize.allCases) { t in Text(t.title).tag(t) }
                         }
                         .pickerStyle(.segmented)
@@ -487,13 +490,13 @@ struct SidebarView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "number.circle.fill").foregroundStyle(.secondary)
-                            Text("Page size").font(.subheadline).fontWeight(.semibold)
+                            Text(L10n.Sidebar.pageSize).font(.subheadline).fontWeight(.semibold)
                                 .foregroundStyle(.secondary)
                         }
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        Picker("Page size", selection: $state.pageSize) {
+                        Picker(L10n.Sidebar.pageSize, selection: $state.pageSize) {
                             Text("15").tag(15)
                             Text("30").tag(30)
                             Text("60").tag(60)
@@ -507,7 +510,7 @@ struct SidebarView: View {
                     }
                     
                     Toggle(isOn: $state.blurSensitive) {
-                        Label("Blur NSFW (Q/E)", systemImage: "eye.slash")
+                        Label(L10n.Sidebar.blurNSFW, systemImage: "eye.slash")
                     }
                     .toggleStyle(.switch)
                     
@@ -558,12 +561,12 @@ struct SidebarView: View {
 extension SidebarView {
     fileprivate var favoritesSubtitle: String {
         if let name = dependenciesStore.profile?.name {
-            return "ordfav:\(name)"
+            return L10n.Sidebar.Favorites.subtitleUser(name)
         }
         if let name = dependenciesStore.credentials.username {
-            return "ordfav:\(name)"
+            return L10n.Sidebar.Favorites.subtitleUser(name)
         }
-        return "Your favorited posts"
+        return L10n.Sidebar.Favorites.subtitleOwn
     }
 
     fileprivate func showMyFavorites() {

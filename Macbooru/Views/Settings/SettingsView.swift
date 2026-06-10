@@ -86,10 +86,11 @@ struct SettingsView: View {
         do {
             try dependenciesStore.updateCredentials(username: username, apiKey: apiKey)
             status = .success(
-                dependenciesStore.hasCredentials ? "Данные сохранены" : "Данные очищены")
+                dependenciesStore.hasCredentials
+                    ? L10n.Settings.credentialsSaved : L10n.Settings.credentialsCleared)
             isSaving = false
         } catch {
-            status = .error("Не удалось сохранить: \(error.localizedDescription)")
+            status = .error(L10n.Settings.saveFailed(error.localizedDescription))
             isSaving = false
         }
     }
@@ -99,9 +100,9 @@ struct SettingsView: View {
             try dependenciesStore.clearCredentials()
             username = ""
             apiKey = ""
-            status = .success("Данные удалены")
+            status = .success(L10n.Settings.credentialsDeleted)
         } catch {
-            status = .error("Не удалось удалить: \(error.localizedDescription)")
+            status = .error(L10n.Settings.deleteFailed(error.localizedDescription))
         }
     }
 
@@ -127,7 +128,7 @@ struct SettingsView: View {
                 appliedCacheLimitMB = cacheLimitMB
                 cacheUsageMB = bytesToMB(usageBytes)
                 isUpdatingCacheLimit = false
-                status = .success("Лимит кеша обновлён")
+                status = .success(L10n.Settings.cacheLimitUpdated)
             }
         }
     }
@@ -139,7 +140,7 @@ struct SettingsView: View {
             await MainActor.run {
                 cacheUsageMB = 0
                 isClearingCache = false
-                status = .success("Кеш изображений очищен")
+                status = .success(L10n.Settings.cacheCleared)
             }
         }
     }
@@ -157,13 +158,13 @@ struct SettingsView: View {
     private var credentialsSection: some View {
         SettingsCard(
             header: {
-                Label("Danbooru Credentials", systemImage: "key.fill")
+                Label(L10n.Settings.credentials, systemImage: "key.fill")
             }, minHeight: 260
         ) {
             VStack(alignment: .leading, spacing: 18) {
                 Grid(horizontalSpacing: 16, verticalSpacing: 12) {
                     GridRow {
-                        Text("Base URL").settingsLabel()
+                        Text(L10n.Settings.baseURL).settingsLabel()
                         TextField("https://danbooru.donmai.us", text: $danbooruBaseURL)
                             .themedInputField(systemImage: "globe")
                             .modifier(URLTextContentTypeIfAvailable())
@@ -171,8 +172,8 @@ struct SettingsView: View {
                             .frame(maxWidth: 280)
                     }
                     GridRow {
-                        Text("Username").settingsLabel()
-                        TextField("Username", text: $username)
+                        Text(L10n.Settings.username).settingsLabel()
+                        TextField(L10n.Settings.username, text: $username)
                             .themedInputField(
                                 systemImage: "person.fill",
                                 trailingSystemImage: username.isEmpty ? nil : "xmark.circle.fill",
@@ -183,8 +184,8 @@ struct SettingsView: View {
                             .frame(maxWidth: 280)
                     }
                     GridRow {
-                        Text("API Key").settingsLabel()
-                        SecureField("API Key", text: $apiKey)
+                        Text(L10n.Settings.apiKey).settingsLabel()
+                        SecureField(L10n.Settings.apiKey, text: $apiKey)
                             .themedInputField(
                                 systemImage: "key.fill",
                                 trailingSystemImage: apiKey.isEmpty ? nil : "xmark.circle.fill",
@@ -196,9 +197,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Text(
-                    "Данные хранятся в системном Keychain и используются для избранного, голосований и комментариев."
-                )
+                Text(L10n.Settings.credentialsFootnote)
                 .font(.footnote)
                 .foregroundStyle(Theme.ColorPalette.textMuted)
 
@@ -206,7 +205,7 @@ struct SettingsView: View {
                     AccountSummaryView(profile: profile)
                 } else if let error = dependenciesStore.authenticationError {
                     StatusBanner(
-                        text: "Ошибка проверки: \(error)",
+                        text: L10n.Settings.verificationFailed(error),
                         symbol: "exclamationmark.triangle.fill",
                         tint: .red
                     )
@@ -214,7 +213,7 @@ struct SettingsView: View {
 
                 HStack(spacing: 12) {
                     Button(role: .destructive, action: clearCredentials) {
-                        Label("Очистить", systemImage: "trash")
+                        Label(L10n.Settings.clear, systemImage: "trash")
                     }
                     .buttonStyle(Theme.GlassButtonStyle(kind: .destructive))
                     .disabled(!(dependenciesStore.credentials.hasCredentials))
@@ -223,7 +222,7 @@ struct SettingsView: View {
                         if isSaving {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("Сохранить", systemImage: "checkmark.circle.fill")
+                            Label(L10n.Settings.save, systemImage: "checkmark.circle.fill")
                         }
                     }
                     .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
@@ -236,20 +235,20 @@ struct SettingsView: View {
     private var cacheSection: some View {
         SettingsCard(
             header: {
-                Label("Кеш изображений", systemImage: "externaldrive.fill.badge.timemachine")
+                Label(L10n.Settings.imageCache, systemImage: "externaldrive.fill.badge.timemachine")
             }, minHeight: 360
         ) {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Максимальный размер кеша")
+                Text(L10n.Settings.maxCacheSize)
                     .font(.subheadline.weight(.semibold))
 
                 Slider(value: $cacheLimitMB, in: 128...1024, step: 64)
                     .tint(Theme.ColorPalette.accent)
 
                 HStack {
-                    Text("Текущий лимит: \(Int(cacheLimitMB)) МБ")
+                    Text(L10n.Settings.currentLimit(Int(cacheLimitMB)))
                     Spacer()
-                    Text("Используется: \(formattedMB(cacheUsageMB)) МБ")
+                    Text(L10n.Settings.cacheUsage(formattedMB(cacheUsageMB)))
                         .foregroundStyle(Theme.ColorPalette.textMuted)
                 }
 
@@ -258,7 +257,7 @@ struct SettingsView: View {
                         if isUpdatingCacheLimit {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("Применить", systemImage: "arrow.triangle.2.circlepath")
+                            Label(L10n.Settings.apply, systemImage: "arrow.triangle.2.circlepath")
                         }
                     }
                     .buttonStyle(Theme.GlassButtonStyle(kind: .primary))
@@ -268,7 +267,7 @@ struct SettingsView: View {
                         if isClearingCache {
                             ProgressView().controlSize(.small)
                         } else {
-                            Label("Очистить", systemImage: "trash")
+                            Label(L10n.Settings.clear, systemImage: "trash")
                         }
                     }
                     .buttonStyle(Theme.GlassButtonStyle(kind: .destructive))
@@ -281,42 +280,41 @@ struct SettingsView: View {
     private var generalSection: some View {
         SettingsCard(
             header: {
-                Label("Общие настройки", systemImage: "slider.horizontal.3")
+                Label(L10n.Settings.general, systemImage: "slider.horizontal.3")
             }, minHeight: 360
         ) {
             VStack(alignment: .leading, spacing: 12) {
                 ToggleRow(
-                    title: "Бесконечная прокрутка",
-                    subtitle: "Автоматически подгружать следующую страницу при прокрутке.",
+                    title: L10n.Settings.infiniteScroll,
+                    subtitle: L10n.Settings.infiniteScrollSubtitle,
                     systemImage: "infinity",
                     isOn: $search.infiniteScrollEnabled
                 )
                 Divider().opacity(0.1)
                 ToggleRow(
-                    title: "Щадящий режим (Low performance)",
-                    subtitle:
-                        "Отключает анимации и снижает качество интерполяции для слабых устройств.",
+                    title: L10n.Settings.lowPerformance,
+                    subtitle: L10n.Settings.lowPerformanceSubtitle,
                     systemImage: "tortoise",
                     isOn: $search.lowPerformance
                 )
                 Divider().opacity(0.1)
                 ToggleRow(
-                    title: "Обновлять список постов при запуске",
-                    subtitle: "Автоматически загружает свежие посты при старте приложения.",
+                    title: L10n.Settings.autoRefresh,
+                    subtitle: L10n.Settings.autoRefreshSubtitle,
                     systemImage: "arrow.clockwise",
                     isOn: $autoRefreshOnLaunch
                 )
                 Divider().opacity(0.1)
                 ToggleRow(
-                    title: "Показывать подсказки горячих клавиш",
-                    subtitle: "Отображает команды в интерфейсе и тултипах.",
+                    title: L10n.Settings.keyboardHints,
+                    subtitle: L10n.Settings.keyboardHintsSubtitle,
                     systemImage: "command",
                     isOn: $showKeyboardHints
                 )
                 Divider().opacity(0.1)
                 ToggleRow(
-                    title: "Размывать контент NSFW по умолчанию",
-                    subtitle: "Применяет блюр к чувствительным постам и деталям.",
+                    title: L10n.Settings.blurNSFW,
+                    subtitle: L10n.Settings.blurNSFWSubtitle,
                     systemImage: "eye.slash",
                     isOn: $blurSensitiveDefault
                 )
@@ -327,29 +325,29 @@ struct SettingsView: View {
     private var resourcesSection: some View {
         SettingsCard(
             header: {
-                Label("Дополнительно", systemImage: "info.circle")
+                Label(L10n.Settings.more, systemImage: "info.circle")
             }, minHeight: 240
         ) {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Ссылки и инструменты")
+                Text(L10n.Settings.linksAndTools)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ColorPalette.textSecondary)
                 VStack(alignment: .leading, spacing: 10) {
                     LinkRow(
-                        title: "Документация API",
+                        title: L10n.Settings.apiDocs,
                         subtitle: "danbooru.donmai.us",
                         systemImage: "doc.text",
                         destination: URL(string: "https://danbooru.donmai.us/wiki_pages/help:api")!
                     )
                     ActionRow(
-                        title: "Открыть Keychain",
-                        subtitle: "Управление сохранёнными ключами доступа",
+                        title: L10n.Settings.openKeychain,
+                        subtitle: L10n.Settings.keychainSubtitle,
                         systemImage: "key"
                     ) {
                         openKeychainApp()
                     }
                     LinkRow(
-                        title: "Проект на GitHub",
+                        title: L10n.Settings.github,
                         subtitle: "github.com/MikoMikocchi/Macbooru",
                         systemImage: "link",
                         destination: URL(string: "https://github.com/MikoMikocchi/Macbooru")!
@@ -362,7 +360,7 @@ struct SettingsView: View {
     private var statusSection: some View {
         SettingsCard(
             header: {
-                Label("Состояние", systemImage: "bell")
+                Label(L10n.Settings.status, systemImage: "bell")
             }, minHeight: 240
         ) {
             VStack(alignment: .leading, spacing: 16) {
@@ -376,7 +374,7 @@ struct SettingsView: View {
                     )
                 } else {
                     StatusBanner(
-                        text: "Все системы в норме",
+                        text: L10n.Settings.allGood,
                         symbol: "checkmark.circle.fill",
                         tint: .green
                     )
@@ -626,7 +624,8 @@ private struct AccountSummaryView: View {
                 }
                 if let created = profile.createdAt {
                     Text(
-                        "Зарегистрирован: \(created.formatted(date: .abbreviated, time: .omitted))"
+                        L10n.Settings.registered(
+                            created.formatted(date: .abbreviated, time: .omitted))
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)

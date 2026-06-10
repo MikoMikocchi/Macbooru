@@ -46,27 +46,27 @@ struct PostDetailView: View {
     @ViewBuilder
     private func openMenu(state: ActionChip.ChipState = .normal) -> some View {
         Menu {
-            Button("Открыть страницу поста", systemImage: "link") {
+            Button(L10n.PostDetail.openPostPage, systemImage: "link") {
                 #if os(macOS)
                     NSWorkspace.shared.open(viewModel.pageURL)
                 #endif
             }
             if let u = post.largeURL {
-                Button("Открыть large", systemImage: "safari") {
+                Button(L10n.PostDetail.openLarge, systemImage: "safari") {
                     #if os(macOS)
                         NSWorkspace.shared.open(u)
                     #endif
                 }
             }
             if let u = post.fileURL {
-                Button("Открыть оригинал", systemImage: "safari") {
+                Button(L10n.PostDetail.openOriginal, systemImage: "safari") {
                     #if os(macOS)
                         NSWorkspace.shared.open(u)
                     #endif
                 }
             }
             if let src = post.source, let u = URL(string: src) {
-                Button("Открыть источник", systemImage: "safari") {
+                Button(L10n.PostDetail.openSource, systemImage: "safari") {
                     #if os(macOS)
                         NSWorkspace.shared.open(u)
                     #endif
@@ -74,11 +74,11 @@ struct PostDetailView: View {
             }
         } label: {
             ActionChip(
-                title: "Открыть",
+                title: L10n.PostDetail.open,
                 systemImage: "safari",
                 tint: .cyan,
                 state: state,
-                accessibilityHint: "Открыть ссылки поста в браузере"
+                accessibilityHint: L10n.PostDetail.openHint
             )
         }
         .menuStyle(.borderlessButton)
@@ -87,33 +87,33 @@ struct PostDetailView: View {
     @ViewBuilder
     private func copyMenu(state: ActionChip.ChipState = .normal) -> some View {
         Menu {
-            Button("Скопировать URL поста", systemImage: "link") { copyPostURL() }
+            Button(L10n.PostDetail.copyPostURL, systemImage: "link") { copyPostURL() }
             if post.fileURL != nil || post.largeURL != nil {
-                Button("Скопировать изображение", systemImage: "photo.on.rectangle") {
+                Button(L10n.PostDetail.copyImage, systemImage: "photo.on.rectangle") {
                     Task { await viewModel.copyImageToPasteboard() }
                 }
             }
             if post.fileURL != nil {
-                Button("Скопировать URL оригинала", systemImage: "link.badge.plus") {
+                Button(L10n.PostDetail.copyOriginalURL, systemImage: "link.badge.plus") {
                     copyOriginalURL()
                 }
             }
             if let src = post.source, URL(string: src) != nil {
-                Button("Скопировать URL источника", systemImage: "doc.on.doc") {
+                Button(L10n.PostDetail.copySourceURL, systemImage: "doc.on.doc") {
                     copySourceURL()
                 }
             }
             Divider()
-            Button("Скопировать теги", systemImage: "doc.on.doc") {
+            Button(L10n.PostDetail.copyTags, systemImage: "doc.on.doc") {
                 copyTagsToPasteboard()
             }
         } label: {
             ActionChip(
-                title: "Копировать",
+                title: L10n.PostDetail.copy,
                 systemImage: "doc.on.doc",
                 tint: .mint,
                 state: state,
-                accessibilityHint: "Скопировать полезные ссылки поста"
+                accessibilityHint: L10n.PostDetail.copyHint
             )
         }
         .menuStyle(.borderlessButton)
@@ -126,7 +126,8 @@ struct PostDetailView: View {
                 Task { await viewModel.performFavorite(add: !viewModel.currentFavoriteState) }
             } label: {
                 Label(
-                    viewModel.currentFavoriteState ? "Убрать из избранного" : "В избранное",
+                    viewModel.currentFavoriteState
+                        ? L10n.PostDetail.removeFavorite : L10n.PostDetail.addFavorite,
                     systemImage: viewModel.currentFavoriteState ? "heart.slash" : "heart"
                 )
             }
@@ -137,7 +138,7 @@ struct PostDetailView: View {
             Button {
                 Task { await viewModel.performVote(score: 1) }
             } label: {
-                Label("Оценка +1", systemImage: "hand.thumbsup")
+                Label(L10n.PostDetail.voteUp, systemImage: "hand.thumbsup")
             }
             .disabled(
                 viewModel.isInteractionInProgress
@@ -148,7 +149,7 @@ struct PostDetailView: View {
             Button {
                 Task { await viewModel.performVote(score: -1) }
             } label: {
-                Label("Оценка -1", systemImage: "hand.thumbsdown")
+                Label(L10n.PostDetail.voteDown, systemImage: "hand.thumbsdown")
             }
             .disabled(
                 viewModel.isInteractionInProgress
@@ -157,35 +158,35 @@ struct PostDetailView: View {
             )
         } label: {
             ActionChip(
-                title: "Действия",
+                title: L10n.PostDetail.actions,
                 systemImage: "hand.tap",
                 tint: .pink,
                 state: state,
-                accessibilityHint: "Добавить в избранное или проголосовать"
+                accessibilityHint: L10n.PostDetail.actionsHint
             )
         }
         .menuStyle(.borderlessButton)
         .disabled(!dependenciesStore.hasCredentials || state == .loading)
         .help(
             dependenciesStore.hasCredentials
-                ? "Избранное и голосование"
-                : "Укажите учетные данные Danbooru в настройках"
+                ? L10n.PostDetail.favAndVote
+                : L10n.PostDetail.credentialsRequired
         )
     }
 
     @ViewBuilder
     private func moreMenu(state: ActionChip.ChipState = .normal) -> some View {
         Menu {
-            Button("Показать папку загрузок", systemImage: "folder") {
+            Button(L10n.PostDetail.showDownloads, systemImage: "folder") {
                 revealDownloadsFolder()
             }
         } label: {
             ActionChip(
-                title: "Ещё",
+                title: L10n.PostDetail.more,
                 systemImage: "ellipsis.circle",
                 tint: Theme.ColorPalette.textMuted,
                 state: state,
-                accessibilityHint: "Показать папку загрузок Macbooru"
+                accessibilityHint: L10n.PostDetail.moreHint
             )
         }
         .menuStyle(.borderlessButton)
@@ -252,7 +253,7 @@ struct PostDetailView: View {
                         usesMaterial: false,
                         action: resetZoom
                     )
-                    .help("Сбросить зум и позицию")
+                    .help(L10n.PostDetail.resetZoom)
 
                     // Zoom out / in with disabled states at bounds
                     Theme.IconButton(
@@ -376,26 +377,26 @@ struct PostDetailView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.Gradients.appBackground(for: colorScheme).ignoresSafeArea())
         }
-        .navigationTitle("Пост #\(post.id)")
+        .navigationTitle(L10n.PostDetail.title(postID: post.id))
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button(action: goPrevious) {
                     Image(systemName: "chevron.left")
                 }
                 .disabled(!canGoPrevious)
-                .help("Предыдущий пост")
+                .help(L10n.PostDetail.prevPost)
                 .keyboardShortcut("[", modifiers: [.command])
 
                 Button(action: goNext) {
                     Image(systemName: "chevron.right")
                 }
                 .disabled(!canGoNext)
-                .help("Следующий пост")
+                .help(L10n.PostDetail.nextPost)
                 .keyboardShortcut("]", modifiers: [.command])
             }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: { copyTagsToPasteboard() }) { Image(systemName: "doc.on.doc") }
-                    .help("Скопировать теги")
+                    .help(L10n.PostDetail.copyTags)
                     .keyboardShortcut("c", modifiers: [.command, .shift])
                 Button(action: { Task { await viewModel.downloadBestImage() } }) {
                     if viewModel.isDownloading {
@@ -406,7 +407,7 @@ struct PostDetailView: View {
                     }
                 }
                 .disabled(viewModel.isDownloading || viewModel.bestImageCandidates.isEmpty)
-                .help("Скачать лучшее изображение")
+                .help(L10n.PostDetail.downloadBest)
             }
         }
         .overlay(alignment: .bottom) {
@@ -492,7 +493,7 @@ struct PostDetailView: View {
                 let pb = NSPasteboard.general
                 pb.clearContents()
                 pb.setString(s, forType: .string)
-                viewModel.showToast("Теги скопированы")
+                viewModel.showToast(L10n.Toast.tagsCopied)
             }
         #endif
     }
@@ -512,7 +513,7 @@ struct PostDetailView: View {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(tag, forType: .string)
-            viewModel.showToast("Тег скопирован: \(tag)")
+            viewModel.showToast(L10n.Toast.tagCopied(tag))
         #endif
     }
 
@@ -522,7 +523,7 @@ struct PostDetailView: View {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(url.absoluteString, forType: .string)
-            viewModel.showToast("URL оригинала скопирован")
+            viewModel.showToast(L10n.Toast.originalURLCopied)
         #endif
     }
 
@@ -532,7 +533,7 @@ struct PostDetailView: View {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(url.absoluteString, forType: .string)
-            viewModel.showToast("URL поста скопирован")
+            viewModel.showToast(L10n.Toast.postURLCopied)
         #endif
     }
 
@@ -542,7 +543,7 @@ struct PostDetailView: View {
             let pb = NSPasteboard.general
             pb.clearContents()
             pb.setString(url.absoluteString, forType: .string)
-            viewModel.showToast("URL источника скопирован")
+            viewModel.showToast(L10n.Toast.sourceURLCopied)
         #endif
     }
 
@@ -554,7 +555,7 @@ struct PostDetailView: View {
                     create: false)
                 NSWorkspace.shared.activateFileViewerSelecting([downloads])
             } catch {
-                viewModel.showToast("Не удалось открыть папку загрузок: \(error.localizedDescription)")
+                viewModel.showToast(L10n.Toast.downloadsFolderFailed(error.localizedDescription))
             }
         #endif
     }
@@ -566,35 +567,35 @@ struct PostDetailView: View {
 
             
             menu.addItem(
-                withTitle: "Вписать", action: #selector(MenuActionTarget.fit), keyEquivalent: "f")
+                withTitle: L10n.PostDetail.fit, action: #selector(MenuActionTarget.fit), keyEquivalent: "f")
             menu.addItem(
-                withTitle: "Увеличить", action: #selector(MenuActionTarget.zoomIn), keyEquivalent: "+"
+                withTitle: L10n.PostDetail.zoomIn, action: #selector(MenuActionTarget.zoomIn), keyEquivalent: "+"
             )
             menu.addItem(
-                withTitle: "Уменьшить", action: #selector(MenuActionTarget.zoomOut),
+                withTitle: L10n.PostDetail.zoomOut, action: #selector(MenuActionTarget.zoomOut),
                 keyEquivalent: "-")
             menu.addItem(NSMenuItem.separator())
 
             
             menu.addItem(
-                withTitle: "По центру", action: #selector(MenuActionTarget.center), keyEquivalent: "")
+                withTitle: L10n.PostDetail.center, action: #selector(MenuActionTarget.center), keyEquivalent: "")
             menu.addItem(NSMenuItem.separator())
 
             
             let openPost = NSMenuItem(
-                title: "Открыть страницу поста", action: #selector(MenuActionTarget.openPostPage),
+                title: L10n.PostDetail.openPostPage, action: #selector(MenuActionTarget.openPostPage),
                 keyEquivalent: "")
             menu.addItem(openPost)
             if post.largeURL != nil {
                 menu.addItem(
                     NSMenuItem(
-                        title: "Открыть large", action: #selector(MenuActionTarget.openLarge),
+                        title: L10n.PostDetail.openLarge, action: #selector(MenuActionTarget.openLarge),
                         keyEquivalent: ""))
             }
             if post.fileURL != nil {
                 menu.addItem(
                     NSMenuItem(
-                        title: "Открыть оригинал", action: #selector(MenuActionTarget.openOriginal),
+                        title: L10n.PostDetail.openOriginal, action: #selector(MenuActionTarget.openOriginal),
                         keyEquivalent: ""))
             }
             menu.addItem(NSMenuItem.separator())
@@ -602,41 +603,41 @@ struct PostDetailView: View {
             
             menu.addItem(
                 NSMenuItem(
-                    title: "Скопировать теги", action: #selector(MenuActionTarget.copyTags),
+                    title: L10n.PostDetail.copyTags, action: #selector(MenuActionTarget.copyTags),
                     keyEquivalent: ""))
             menu.addItem(
                 NSMenuItem(
-                    title: "Скопировать URL поста",
+                    title: L10n.PostDetail.copyPostURL,
                     action: #selector(MenuActionTarget.copyPostURL),
                     keyEquivalent: ""))
             if post.fileURL != nil {
                 menu.addItem(
                     NSMenuItem(
-                        title: "Скопировать URL оригинала",
+                        title: L10n.PostDetail.copyOriginalURL,
                         action: #selector(MenuActionTarget.copyOriginalURL),
                         keyEquivalent: ""))
             }
             if post.fileURL != nil || post.largeURL != nil || post.previewURL != nil {
                 menu.addItem(
                     NSMenuItem(
-                        title: "Скопировать изображение",
+                        title: L10n.PostDetail.copyImage,
                         action: #selector(MenuActionTarget.copyImage),
                         keyEquivalent: ""))
             }
             if let src = post.source, URL(string: src) != nil {
                 menu.addItem(
                     NSMenuItem(
-                        title: "Скопировать URL источника",
+                        title: L10n.PostDetail.copySourceURL,
                         action: #selector(MenuActionTarget.copySourceURL),
                         keyEquivalent: ""))
             }
             menu.addItem(
                 NSMenuItem(
-                    title: "Скачать лучшее изображение", action: #selector(MenuActionTarget.download),
+                    title: L10n.PostDetail.downloadBest, action: #selector(MenuActionTarget.download),
                     keyEquivalent: ""))
             menu.addItem(
                 NSMenuItem(
-                    title: "Показать папку загрузок",
+                    title: L10n.PostDetail.showDownloads,
                     action: #selector(MenuActionTarget.revealDownloadsFolder),
                     keyEquivalent: ""))
 

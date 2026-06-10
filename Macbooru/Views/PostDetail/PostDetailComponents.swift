@@ -85,7 +85,7 @@ struct ActionChip: View {
     }
 
     private var accessibilityValueText: String {
-        state == .loading ? "Загрузка" : ""
+        state == .loading ? L10n.PostDetail.loading : ""
     }
 
     private var resolvedHint: String? {
@@ -94,9 +94,9 @@ struct ActionChip: View {
         }
         switch state {
         case .disabled:
-            return "Сейчас недоступно"
+            return L10n.PostDetail.unavailable
         case .loading:
-            return "Выполняется"
+            return L10n.PostDetail.inProgress
         default:
             return nil
         }
@@ -129,7 +129,7 @@ struct ActionsCard<Open: View, Copy: View, Interact: View, More: View>: View {
                         Image(systemName: "tray.and.arrow.down")
                             .font(.system(size: 14, weight: .semibold))
                     }
-                    Text(isDownloading ? "Сохранение…" : "Скачать")
+                    Text(isDownloading ? L10n.PostDetail.saving : L10n.PostDetail.download)
                         .font(.callout.weight(.semibold))
                 }
             }
@@ -152,7 +152,7 @@ struct InfoCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label("Информация", systemImage: "info.circle")
+                Label(L10n.PostDetail.info, systemImage: "info.circle")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(Theme.ColorPalette.textPrimary)
                 Spacer(minLength: 0)
@@ -164,41 +164,41 @@ struct InfoCard: View {
             Divider().opacity(0.08)
 
             VStack(alignment: .leading, spacing: 12) {
-                InfoRow(icon: "number", title: "ID", value: "#\(post.id)")
+                InfoRow(icon: "number", title: L10n.PostDetail.id, value: "#\(post.id)")
 
                 if let score = post.score {
-                    InfoRow(icon: "star.fill", title: "Рейтинг", value: "\(score)", tint: .yellow) {
+                    InfoRow(icon: "star.fill", title: L10n.PostDetail.rating, value: "\(score)", tint: .yellow) {
                         ScoreChip(score: score)
                     }
                 }
 
                 if let fav = favoriteCount {
-                    InfoRow(icon: "heart.fill", title: "В избранном", value: "\(fav)", tint: .pink)
+                    InfoRow(icon: "heart.fill", title: L10n.PostDetail.favCount, value: "\(fav)", tint: .pink)
                 }
 
                 if let isFav = isFavorited {
                     InfoRow(
                         icon: "heart.circle.fill",
-                        title: "Избранное",
-                        value: isFav ? "Да" : "Нет",
+                        title: L10n.PostDetail.favorite,
+                        value: isFav ? L10n.PostDetail.yes : L10n.PostDetail.no,
                         tint: .pink
                     )
                 }
 
                 if let up = upScore {
                     InfoRow(
-                        icon: "hand.thumbsup.fill", title: "Плюсы", value: "\(up)", tint: .green)
+                        icon: "hand.thumbsup.fill", title: L10n.PostDetail.upvotes, value: "\(up)", tint: .green)
                 }
 
                 if let down = downScore {
                     InfoRow(
-                        icon: "hand.thumbsdown.fill", title: "Минусы", value: "\(down)",
+                        icon: "hand.thumbsdown.fill", title: L10n.PostDetail.downvotes, value: "\(down)",
                         tint: .orange)
                 }
 
                 if let width = post.width, let height = post.height {
                     InfoRow(
-                        icon: "aspectratio", title: "Размер", value: "\(width) × \(height)",
+                        icon: "aspectratio", title: L10n.PostDetail.dimensions, value: "\(width) × \(height)",
                         tint: .cyan
                     ) {
                         SizeBadge(width: width, height: height)
@@ -208,7 +208,7 @@ struct InfoCard: View {
                 if let date = post.createdAt {
                     InfoRow(
                         icon: "calendar",
-                        title: "Создан",
+                        title: L10n.PostDetail.created,
                         value: date.formatted(date: .abbreviated, time: .shortened),
                         tint: .blue
                     )
@@ -220,7 +220,7 @@ struct InfoCard: View {
                 Link(destination: url) {
                     HStack(spacing: 8) {
                         Image(systemName: "link")
-                        Text("Открыть источник")
+                        Text(L10n.PostDetail.openSource)
                             .font(.callout.weight(.semibold))
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.right")
@@ -310,7 +310,7 @@ struct TagsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label("Теги", systemImage: "tag")
+                Label(L10n.PostDetail.tags, systemImage: "tag")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(Theme.ColorPalette.textPrimary)
                 Spacer(minLength: 0)
@@ -327,7 +327,7 @@ struct TagsCard: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if !post.tagsArtist.isEmpty {
                         TagSection(
-                            title: "Художник",
+                            title: L10n.PostDetail.tagArtist,
                             color: .purple,
                             tags: post.tagsArtist,
                             onOpenTag: onOpenTag,
@@ -336,7 +336,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsCopyright.isEmpty {
                         TagSection(
-                            title: "Правообладатель",
+                            title: L10n.PostDetail.tagCopyright,
                             color: .teal,
                             tags: post.tagsCopyright,
                             onOpenTag: onOpenTag,
@@ -345,7 +345,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsCharacter.isEmpty {
                         TagSection(
-                            title: "Персонажи",
+                            title: L10n.PostDetail.tagCharacter,
                             color: .orange,
                             tags: post.tagsCharacter,
                             onOpenTag: onOpenTag,
@@ -354,7 +354,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsGeneral.isEmpty {
                         TagSection(
-                            title: "Общие",
+                            title: L10n.PostDetail.tagGeneral,
                             color: .secondary,
                             tags: post.tagsGeneral,
                             onOpenTag: onOpenTag,
@@ -363,7 +363,7 @@ struct TagsCard: View {
                     }
                     if !post.tagsMeta.isEmpty {
                         TagSection(
-                            title: "Мета",
+                            title: L10n.PostDetail.tagMeta,
                             color: .pink,
                             tags: post.tagsMeta,
                             onOpenTag: onOpenTag,
@@ -379,7 +379,7 @@ struct TagsCard: View {
                     onCopyTag: { onCopyTag($0) }
                 )
             } else {
-                Text("Нет тегов")
+                Text(L10n.PostDetail.noTags)
                     .font(.callout)
                     .foregroundStyle(Theme.ColorPalette.textMuted)
             }
@@ -429,7 +429,7 @@ struct TagSection: View {
                         pb.clearContents()
                         pb.setString(tags.joined(separator: " "), forType: .string)
                     }
-                    .help("Скопировать теги раздела")
+                    .help(L10n.PostDetail.copySectionTags)
                 #endif
             }
             TagFlowView(
@@ -497,7 +497,7 @@ struct TagChip: View {
                 chipContent
             }
             .buttonStyle(.plain)
-            .help("ЛКМ — поиск, ПКМ — копировать")
+            .help(L10n.PostDetail.tagHelp)
             .overlay(
                 RightClickCatcher(onRightClick: { onCopy?() })
                     .allowsHitTesting(true)
@@ -536,8 +536,8 @@ struct TagChip: View {
             )
             .foregroundStyle(tint)
             .accessibilityElement()
-            .accessibilityLabel(Text("Тег \(title)"))
-            .accessibilityHint(Text("Двойной тап для поиска."))
+            .accessibilityLabel(Text(L10n.PostDetail.tagAccessibility(title)))
+            .accessibilityHint(Text(L10n.PostDetail.tagAccessibilityHint))
     }
 }
 
@@ -557,7 +557,7 @@ struct CommentsCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label("Комментарии", systemImage: "text.bubble")
+                Label(L10n.PostDetail.comments, systemImage: "text.bubble")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(Theme.ColorPalette.textPrimary)
                 Spacer(minLength: 0)
@@ -571,7 +571,7 @@ struct CommentsCard: View {
             if isLoading {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Загрузка комментариев…")
+                    Text(L10n.PostDetail.loadingComments)
                         .font(.callout)
                         .foregroundStyle(Theme.ColorPalette.textMuted)
                 }
@@ -581,12 +581,12 @@ struct CommentsCard: View {
                         .font(.callout)
                         .foregroundStyle(Theme.ColorPalette.textMuted)
                     Button(action: onReload) {
-                        Label("Повторить", systemImage: "arrow.clockwise")
+                        Label(L10n.Grid.retry, systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(Theme.GlassButtonStyle(kind: .secondary))
                 }
             } else if comments.isEmpty {
-                Text("Комментариев пока нет")
+                Text(L10n.PostDetail.noComments)
                     .font(.callout)
                     .foregroundStyle(Theme.ColorPalette.textMuted)
             } else {
@@ -609,7 +609,7 @@ struct CommentsCard: View {
                     }
                 } else {
                     Button(action: onLoadMore) {
-                        Label("Загрузить ещё", systemImage: "chevron.down")
+                        Label(L10n.PostDetail.loadMore, systemImage: "chevron.down")
                             .font(.callout.weight(.semibold))
                     }
                     .frame(maxWidth: .infinity)
@@ -620,7 +620,7 @@ struct CommentsCard: View {
             Divider().opacity(0.08)
 
             VStack(alignment: .leading, spacing: 10) {
-                Text("Добавить комментарий")
+                Text(L10n.PostDetail.addComment)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(Theme.ColorPalette.textPrimary)
 
@@ -637,7 +637,7 @@ struct CommentsCard: View {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .strokeBorder(Theme.ColorPalette.glassBorder, lineWidth: 1)
                     )
-                    .accessibilityHint("Введите комментарий")
+                    .accessibilityHint(L10n.PostDetail.commentHint)
 
                 HStack {
                     Spacer()
@@ -647,7 +647,7 @@ struct CommentsCard: View {
                                 .controlSize(.small)
                                 .tint(.white)
                         } else {
-                            Label("Отправить", systemImage: "paperplane")
+                            Label(L10n.PostDetail.send, systemImage: "paperplane")
                                 .font(.callout.weight(.semibold))
                         }
                     }
@@ -661,8 +661,8 @@ struct CommentsCard: View {
 
                 Text(
                     canSubmit
-                        ? "Не забудьте соблюдать правила сообщества."
-                        : "Для отправки комментариев добавьте креды Danbooru в настройках."
+                        ? L10n.PostDetail.commentRules
+                        : L10n.PostDetail.commentCredentials
                 )
                 .font(.caption)
                 .foregroundStyle(Theme.ColorPalette.textMuted)
@@ -730,12 +730,12 @@ struct CommentRow: View {
                 .strokeBorder(Theme.ColorPalette.glassBorder.opacity(0.6), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("Комментарий от \(authorName)"))
+        .accessibilityLabel(Text(L10n.PostDetail.commentFrom(authorName)))
     }
 
     private var authorName: String {
         if let name = comment.creatorName, !name.isEmpty { return name }
-        return "Аноним"
+        return L10n.PostDetail.anonymous
     }
 
     private var avatarInitial: String {
@@ -820,12 +820,12 @@ struct UgoiraPlaceholderView: View {
             Image(systemName: "film.stack")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
-            Text("Ugoira")
+            Text(L10n.PostDetail.ugoira)
                 .font(.title2.weight(.semibold))
-            Text("Анимированный WebP — откройте в браузере")
+            Text(L10n.PostDetail.ugoiraHint)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Link("Открыть страницу поста", destination: pageURL)
+            Link(L10n.PostDetail.openPostPage, destination: pageURL)
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity)

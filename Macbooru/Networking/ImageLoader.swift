@@ -338,7 +338,7 @@ struct RemoteImage: View {
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(.secondary)
-                    Button("Retry") {
+                    Button(L10n.Grid.retry) {
                         Task { await load() }
                     }
                     .buttonStyle(.bordered)

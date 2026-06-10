@@ -60,24 +60,24 @@ struct PostTileView: View {
             }
         }
         .contextMenu {
-            if let url = post.fileURL { Link("Открыть оригинал в браузере", destination: url) }
-            if let url = post.largeURL { Link("Открыть large в браузере", destination: url) }
-            if let url = post.previewURL { Link("Открыть превью в браузере", destination: url) }
+            if let url = post.fileURL { Link(L10n.PostTile.openOriginalBrowser, destination: url) }
+            if let url = post.largeURL { Link(L10n.PostTile.openLargeBrowser, destination: url) }
+            if let url = post.previewURL { Link(L10n.PostTile.openPreviewBrowser, destination: url) }
             if let src = post.source, let u = URL(string: src) {
                 Divider()
-                Link("Открыть источник", destination: u)
+                Link(L10n.PostDetail.openSource, destination: u)
             }
             Divider()
             if let url = post.fileURL {
-                Button("Скопировать URL оригинала") { copyToClipboard(url.absoluteString) }
+                Button(L10n.PostDetail.copyOriginalURL) { copyToClipboard(url.absoluteString) }
             }
             if let url = post.largeURL {
-                Button("Скопировать URL large") { copyToClipboard(url.absoluteString) }
+                Button(L10n.PostTile.copyLargeURL) { copyToClipboard(url.absoluteString) }
             }
             if let url = post.previewURL {
-                Button("Скопировать URL превью") { copyToClipboard(url.absoluteString) }
+                Button(L10n.PostTile.copyPreviewURL) { copyToClipboard(url.absoluteString) }
             }
-            Button("Скопировать теги") {
+            Button(L10n.PostDetail.copyTags) {
                 let tags = post.allTags.joined(separator: " ")
                 copyToClipboard(tags)
             }
@@ -118,7 +118,7 @@ struct PostTileView: View {
                 Image(systemName: "film.stack")
                     .font(.title2)
                     .foregroundStyle(.secondary)
-                Text("Ugoira")
+                Text(L10n.PostDetail.ugoira)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
@@ -194,7 +194,7 @@ private struct VisualBlurOverlay: View {
             VStack(spacing: 8) {
                 Image(systemName: "eye.slash")
                     .font(.title2.weight(.semibold))
-                Text("Чувствительный контент")
+                Text(L10n.PostTile.sensitiveContent)
                     .font(.caption.weight(.medium))
             }
             .padding(12)
